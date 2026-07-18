@@ -15,6 +15,12 @@ struct StationPlot: View {
     /// `--mono` flag, right for e-ink-ish surfaces like the lock screen.
     var mono: Bool = false
     var showTemperature: Bool = true
+    /// Draw the full Met Office station model around the circle: TT
+    /// upper-left, TdTd lower-left, PPP upper-right, a+pp tendency at
+    /// right, W₁ past weather lower-right, visibility by the ww slot.
+    /// Off = the plain TRMNL circle (temperature upper-right), which is
+    /// what the widgets use.
+    var fullStationModel: Bool = false
     /// Casing drawn under the barb so it survives a solid 8-okta disc
     /// (`halo` in the Python). Pass the view's background colour.
     var haloColor: Color?
@@ -41,13 +47,24 @@ struct StationPlot: View {
             drawOktas(&context, ink: ink)
             drawBarb(&context, ink: ink, halo: haloColor)
             drawPresentWeather(&context, ink: ink)
+            if fullStationModel {
+                drawStationModelAnnotations(&context, ink: ink)
+            }
             if showTemperature {
                 let label = Text("\(observation.roundedTemp)°")
                     .font(.system(size: 26, weight: .bold))
                     .foregroundStyle(ink)
-                context.draw(label,
-                             at: CGPoint(x: G.cx + G.r * 0.5, y: G.cy - G.r - 6),
-                             anchor: .bottomLeading)
+                if fullStationModel {
+                    // TT — the Met Office slot, upper-left.
+                    context.draw(label,
+                                 at: CGPoint(x: G.cx - G.r * 0.5, y: G.cy - G.r - 6),
+                                 anchor: .bottomTrailing)
+                } else {
+                    // The TRMNL renderer's position, upper-right.
+                    context.draw(label,
+                                 at: CGPoint(x: G.cx + G.r * 0.5, y: G.cy - G.r - 6),
+                                 anchor: .bottomLeading)
+                }
             }
         }
         .aspectRatio(1, contentMode: .fit)
@@ -220,19 +237,94 @@ struct StationPlot: View {
 
     // ── Present weather — port of draw_precip + build_svg placement ────
 
-    private func drawPresentWeather(_ context: inout GraphicsContext, ink: Color) {
-        guard let key = observation.precip else { return }
-        let color = mono ? ink : key.tint
-
-        // Present weather stays left of the circle, but when the barb has a
-        // westerly component it shares that side — nudge the glyph into the
-        // opposite vertical half (build_svg's collision avoidance).
-        var ay = G.cy
+    /// Vertical anchor for the ww glyph: left of the circle, nudged into
+    /// the opposite vertical half when the barb has a westerly component
+    /// (build_svg's collision avoidance).
+    private var presentWeatherAnchorY: Double {
         let wdir = observation.windFromDegrees * .pi / 180
         if observation.windSpeedKnots >= 1 && sin(wdir) < -0.1 {
-            ay = -cos(wdir) >= 0 ? G.cy - G.r * 0.7 : G.cy + G.r * 0.7
+            return -cos(wdir) >= 0 ? G.cy - G.r * 0.7 : G.cy + G.r * 0.7
         }
-        drawGlyph(&context, key: key, x: G.cx - G.r - 26, y: ay, s: 28, color: color)
+        return G.cy
+    }
+
+    private func drawPresentWeather(_ context: inout GraphicsContext, ink: Color) {
+        guard let key = observation.effectivePrecip else { return }
+        let color = mono ? ink : key.tint
+        drawGlyph(&context, key: key, x: G.cx - G.r - 26, y: presentWeatherAnchorY,
+                  s: 28, color: color)
+    }
+
+    // ── Met Office station-model slots (full model only) ───────────────
+
+    private func drawStationModelAnnotations(_ context: inout GraphicsContext, ink: Color) {
+        func label(_ string: String, size: Double, weight: Font.Weight = .bold) -> Text {
+            Text(string).font(.system(size: size, weight: weight)).foregroundStyle(ink)
+        }
+
+        // TdTd — dew point, lower-left.
+        if let dew = observation.dewPointRounded {
+            context.draw(label("\(dew)°", size: 26),
+                         at: CGPoint(x: G.cx - G.r * 0.5, y: G.cy + G.r + 6),
+                         anchor: .topTrailing)
+        }
+        // PPP — MSLP in coded tenths, upper-right.
+        if let ppp = observation.pressureCodedPPP {
+            context.draw(label(ppp, size: 26),
+                         at: CGPoint(x: G.cx + G.r * 0.5, y: G.cy - G.r - 6),
+                         anchor: .bottomLeading)
+        }
+        // a + pp — 3-hour tendency at 3 o'clock, nudged off an easterly
+        // barb (mirror of the ww rule).
+        if let pp = observation.pressureChangeCodedPP,
+           let tendency = observation.pressureTendency {
+            var y = G.cy
+            let wdir = observation.windFromDegrees * .pi / 180
+            if observation.windSpeedKnots >= 1 && sin(wdir) > 0.1 {
+                y = -cos(wdir) >= 0 ? G.cy - G.r * 0.7 : G.cy + G.r * 0.7
+            }
+            context.draw(label(pp, size: 18, weight: .semibold),
+                         at: CGPoint(x: G.cx + G.r + 8, y: y), anchor: .leading)
+            drawTendencyGlyph(&context, tendency,
+                              at: CGPoint(x: G.cx + G.r + 42, y: y), ink: ink)
+        }
+        // W₁ — most significant past weather, small, lower-right.
+        if let past = observation.pastWeather {
+            drawGlyph(&context, key: past,
+                      x: G.cx + (G.r + 30) * 0.7071, y: G.cy + (G.r + 30) * 0.7071,
+                      s: 18, color: ink)
+        }
+        // VV — visibility, just above the ww slot (shown in km — a small
+        // liberty vs the coded synoptic figure).
+        if let visibility = observation.visibilityText {
+            context.draw(label(visibility, size: 12, weight: .medium),
+                         at: CGPoint(x: G.cx - G.r - 22, y: presentWeatherAnchorY - 26),
+                         anchor: .trailing)
+        }
+    }
+
+    /// The WMO "a" barograph-trace shapes, as small polylines.
+    private func drawTendencyGlyph(_ context: inout GraphicsContext,
+                                   _ tendency: StationObservation.PressureTendency,
+                                   at origin: CGPoint, ink: Color) {
+        let w = 18.0, h = 14.0
+        let points: [(Double, Double)]
+        switch tendency {
+        case .rising:         points = [(0, h / 2), (w, -h / 2)]
+        case .falling:        points = [(0, -h / 2), (w, h / 2)]
+        case .steady:         points = [(0, 0), (w, 0)]
+        case .riseThenFall:   points = [(0, h / 2), (w * 0.55, -h / 2), (w, -h * 0.07)]
+        case .fallThenRise:   points = [(0, -h / 2), (w * 0.55, h / 2), (w, h * 0.07)]
+        case .steadyThenRise: points = [(0, h * 0.35), (w * 0.5, h * 0.35), (w, -h / 2)]
+        case .steadyThenFall: points = [(0, -h * 0.35), (w * 0.5, -h * 0.35), (w, h / 2)]
+        }
+        var path = Path()
+        path.move(to: CGPoint(x: origin.x + points[0].0, y: origin.y + points[0].1))
+        for point in points.dropFirst() {
+            path.addLine(to: CGPoint(x: origin.x + point.0, y: origin.y + point.1))
+        }
+        context.stroke(path, with: .color(ink),
+                       style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
     }
 
     private func drawGlyph(_ context: inout GraphicsContext,
@@ -340,7 +432,13 @@ private extension Color {
     }
 }
 
-#Preview("Rain, SW 18 kn, 6/8") {
+#Preview("Full station model — rain, SW 18 kn, 6/8") {
+    StationPlot(observation: .sample, fullStationModel: true,
+                haloColor: Color(uiColor: .systemBackground))
+        .padding(40)
+}
+
+#Preview("Repo circle (widget style)") {
     StationPlot(observation: .sample, haloColor: Color(uiColor: .systemBackground))
         .padding(40)
 }

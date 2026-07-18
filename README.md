@@ -24,7 +24,28 @@ Everything visual comes from the original renderer, unchanged:
 | Present weather | drizzle comma, rain dot, heavy-rain dot triangle, snow star, sleet dot+star, shower triangle, thunder bolt, mist/fog lines — at (CX−R−26, CY), size 28, nudged vertically when a westerly barb shares that side |
 | Tints | the `PRECIP_TINT` palette (rain `#2563eb`, thunder `#ca8a04`, …); `mono` draws them in ink for e-ink-ish surfaces (the lock screen) |
 | Ink | `#1a1a2e` on light, `#eef2f8` on dark (the repo's suggested `--ink` for dark backgrounds) |
-| Temperature | bold 26pt at top-right of the circle (`CX+R/2, CY−R−6`) |
+| Temperature | bold 26pt at top-right of the circle (`CX+R/2, CY−R−6`) in repo mode; the full station model moves it to the Met Office upper-left slot |
+
+## The full station model (app only)
+
+`StationPlot(fullStationModel: true)` adds the rest of the Met Office
+surface-plot slots around the same circle — the widgets keep the plain
+TRMNL circle, since accessory sizes can't carry the annotations:
+
+| Slot | Position | Content | Source |
+| --- | --- | --- | --- |
+| TT | upper-left | air temperature | `temperature_2m` |
+| TdTd | lower-left | dew point | `dew_point_2m` |
+| PPP | upper-right | MSLP, coded tenths (1021.7 → `217`) | `pressure_msl` |
+| a + pp | right | 3-h change in tenths (`+18`) + WMO barograph-trace glyph (rising, falling, rise-then-fall, …) | hourly `pressure_msl` with `past_hours=6` |
+| W₁ | lower-right, small | most significant past-6-h weather glyph (TRMNL severity ranking) | past hourly `weather_code` |
+| VV | left, above ww | visibility (shown in km — a small liberty vs the coded synoptic figure) | `visibility` |
+| ww | left (as before) | present weather, now **phase-corrected by ECMWF's native `precipitation_type`** when precip is falling: ptype knows freezing rain / wet snow / mixed phases the derived WMO code misses; the code keeps character (drizzle, shower, thunder) | `weather_code` + `precipitation_type` |
+
+Cloud *genus* (the C_L/C_M/C_H cumulus/stratus/cirrus glyphs) is the one
+classic slot that can't be done honestly — NWP output has layer amounts,
+not genus. Everything comes from one `best_match` call; the a+pp pair gets
+the mirrored version of the ww collision nudge for easterly barbs.
 
 ## High/low (and the observation question)
 
@@ -88,7 +109,9 @@ widget after each fetch.
 - A TRMNL-style row of small forecast-slot circles (the repo's rolling
   2-hour windows) under the big observation circle.
 - Widget configuration (AppIntents) for a pinned location instead of
-  follow-me.
+  follow-me, and an `&models=ecmwf_ifs025` toggle for ECMWF purists.
+- The true coded VV figure (WMO 4377) instead of km, for maximum chart
+  authenticity.
 - An app icon — the circle itself, presumably at 3 oktas with a stiff
   south-westerly.
 

@@ -1,8 +1,11 @@
 import Foundation
 
-/// Minimal Open-Meteo client. The `current` block is the exact query
+/// Open-Meteo client. The `current` block extends the exact query
 /// `weather_circle.py` makes (including `wind_speed_unit=kn` — barbs are
-/// drawn in knots); the `daily` block adds today's high/low.
+/// drawn in knots) with the remaining Met Office station-model slots:
+/// dew point, MSLP, precipitation + native ECMWF ptype, visibility. The
+/// `hourly` block with `past_hours=6` feeds the 3-hour pressure tendency
+/// and the past-weather (W₁) glyph; `daily` adds today's high/low.
 enum OpenMeteoClient {
     enum FetchError: Error {
         case badURL
@@ -11,18 +14,42 @@ enum OpenMeteoClient {
 
     struct Response: Decodable {
         struct Current: Decodable {
+            let time: String
             let temperature2m: Double
             let weatherCode: Int
             let cloudCover: Double?
             let windSpeed10m: Double?
             let windDirection10m: Double?
+            let dewPoint2m: Double?
+            let pressureMsl: Double?
+            let precipitation: Double?
+            let precipitationType: Double?
+            let visibility: Double?
 
             enum CodingKeys: String, CodingKey {
+                case time
                 case temperature2m = "temperature_2m"
                 case weatherCode = "weather_code"
                 case cloudCover = "cloud_cover"
                 case windSpeed10m = "wind_speed_10m"
                 case windDirection10m = "wind_direction_10m"
+                case dewPoint2m = "dew_point_2m"
+                case pressureMsl = "pressure_msl"
+                case precipitation
+                case precipitationType = "precipitation_type"
+                case visibility
+            }
+        }
+
+        struct Hourly: Decodable {
+            let time: [String]
+            let pressureMsl: [Double?]?
+            let weatherCode: [Int?]?
+
+            enum CodingKeys: String, CodingKey {
+                case time
+                case pressureMsl = "pressure_msl"
+                case weatherCode = "weather_code"
             }
         }
 
@@ -37,6 +64,7 @@ enum OpenMeteoClient {
         }
 
         let current: Current
+        let hourly: Hourly?
         let daily: Daily?
     }
 
@@ -46,7 +74,9 @@ enum OpenMeteoClient {
         components.queryItems = [
             .init(name: "latitude", value: String(format: "%.4f", latitude)),
             .init(name: "longitude", value: String(format: "%.4f", longitude)),
-            .init(name: "current", value: "weather_code,temperature_2m,cloud_cover,wind_speed_10m,wind_direction_10m"),
+            .init(name: "current", value: "weather_code,temperature_2m,cloud_cover,wind_speed_10m,wind_direction_10m,dew_point_2m,pressure_msl,precipitation,precipitation_type,visibility"),
+            .init(name: "hourly", value: "pressure_msl,weather_code"),
+            .init(name: "past_hours", value: "6"),
             .init(name: "daily", value: "temperature_2m_max,temperature_2m_min"),
             .init(name: "forecast_days", value: "1"),
             .init(name: "wind_speed_unit", value: "kn"),
@@ -60,6 +90,36 @@ enum OpenMeteoClient {
         }
         let decoded = try JSONDecoder().decode(Response.self, from: data)
 
+        // 3-hour pressure tendency and past weather, from the hourly trace.
+        // hourly.time[i] are hour marks; the current hour is the one whose
+        // "yyyy-MM-ddTHH" prefix matches current.time.
+        var tendency: StationObservation.PressureTendency?
+        var change3h: Double?
+        var pastCode: Int?
+        if let hourly = decoded.hourly {
+            let hourPrefix = String(decoded.current.time.prefix(13))
+            if let idx = hourly.time.firstIndex(where: { $0.hasPrefix(hourPrefix) }) {
+                if let trace = hourly.pressureMsl, idx >= 3, idx < trace.count,
+                   let now = decoded.current.pressureMsl,
+                   let p3 = trace[idx - 3], let p1 = trace[idx - 1] {
+                    (tendency, change3h) = {
+                        let (t, net) = StationObservation.PressureTendency
+                            .from(p3: p3, p1: p1, now: now)
+                        return (t, net)
+                    }()
+                }
+                if let codes = hourly.weatherCode, idx <= codes.count {
+                    pastCode = codes[max(0, idx - 6)..<idx]
+                        .compactMap { $0 }
+                        .compactMap { code in
+                            StationObservation.precipKey(forWMOCode: code)
+                                .map { (code, StationObservation.severity(of: $0)) }
+                        }
+                        .max { $0.1 < $1.1 }?.0
+                }
+            }
+        }
+
         return StationObservation(
             fetchedAt: Date(),
             latitude: latitude,
@@ -71,6 +131,14 @@ enum OpenMeteoClient {
             windSpeedKnots: decoded.current.windSpeed10m ?? 0,
             windFromDegrees: decoded.current.windDirection10m ?? 0,
             todayHighC: decoded.daily?.temperature2mMax.first,
-            todayLowC: decoded.daily?.temperature2mMin.first)
+            todayLowC: decoded.daily?.temperature2mMin.first,
+            dewPointC: decoded.current.dewPoint2m,
+            pressureMSLhPa: decoded.current.pressureMsl,
+            pressureChange3hPa: change3h,
+            pressureTendency: tendency,
+            pastSignificantWeatherCode: pastCode,
+            visibilityMeters: decoded.current.visibility,
+            precipitationTypeCode: decoded.current.precipitationType.map { Int($0) },
+            precipitationMM: decoded.current.precipitation)
     }
 }

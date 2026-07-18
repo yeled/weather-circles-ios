@@ -13,6 +13,7 @@ struct ContentView: View {
             VStack(spacing: 12) {
                 header
                 StationPlot(observation: observation ?? .sample,
+                            fullStationModel: true,
                             haloColor: Color(uiColor: .systemBackground))
                     .padding(.horizontal, 28)
                     .opacity(observation == nil ? 0.25 : 1)
