@@ -58,7 +58,7 @@ struct ContentView: View {
                     .font(.title3.weight(.medium).monospacedDigit())
             }
             if let observation {
-                Text("\(observation.windText) · \(observation.oktas)⁄8 cloud")
+                Text(caption(for: observation))
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
@@ -68,6 +68,12 @@ struct ContentView: View {
                     .foregroundStyle(.red)
             }
         }
+    }
+
+    private func caption(for observation: StationObservation) -> String {
+        var caption = "\(observation.windText) · \(observation.oktas)⁄8 cloud"
+        if let genus = observation.genusText { caption += " · \(genus)" }
+        return caption
     }
 
     private func refresh() async {
@@ -88,7 +94,7 @@ struct ContentView: View {
         }
 
         do {
-            var fetched = try await OpenMeteoClient.observation(
+            var fetched = try await WeatherService.fetch(
                 latitude: latitude, longitude: longitude, placeName: name)
             if fetched.placeName == nil { fetched.placeName = location.placeName }
             observation = fetched

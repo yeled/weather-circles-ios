@@ -134,3 +134,24 @@ xcrun simctl location booted set 51.5074,-0.1278
 xcrun simctl launch booted com.evilforbeginners.WeatherCircles
 sleep 8 && xcrun simctl io booted screenshot docs/screenshot.png
 ```
+
+## Low-cloud genus (C_L) via METAR
+
+No forecast API carries cloud genus — models output layer amounts, not
+morphology. The only machine-reported genus is the CB / TCU suffix on
+METAR cloud groups, so `MetarClient` asks aviationweather.gov for every
+report in a ±1° box, takes the **nearest fresh (≤ 2 h) report that
+actually describes the sky**, and parses `rawOb` itself (the API's
+decoded `clouds` array silently drops the suffixes). Rules:
+
+- Layer-attached only (`FEW026CB`); remarks like `CB DSNT W` never count.
+- If the nearest station reports no CB/TCU, the glyph stays off — that
+  *is* the observation; we don't scan outward for a more dramatic answer.
+- CB outranks TCU. Drawn as the WMO C_L 9 (anvil) / C_L 2 (tall dome)
+  glyphs below the circle; the caption notes the source station
+  ("CB at KBCT").
+- C_M/C_H remain empty forever — nothing observes them for us, and the
+  circle doesn't fake things.
+
+The widget skips the METAR leg (`includeCloudGenus: false`): it never
+draws the full model, so timeline refreshes shouldn't spend the request.

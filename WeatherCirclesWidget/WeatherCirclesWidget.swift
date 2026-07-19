@@ -52,8 +52,11 @@ struct Provider: TimelineProvider {
             name = cached.placeName
         }
 
-        if let fetched = try? await OpenMeteoClient.observation(
-            latitude: latitude, longitude: longitude, placeName: name) {
+        // No METAR leg in the widget — it never draws the full model, and
+        // timeline refreshes shouldn't spend the extra request.
+        if let fetched = try? await WeatherService.fetch(
+            latitude: latitude, longitude: longitude, placeName: name,
+            includeCloudGenus: false) {
             WeatherStore.save(fetched)
             return fetched
         }

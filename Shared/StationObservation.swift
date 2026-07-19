@@ -34,6 +34,17 @@ struct StationObservation: Codable, Equatable {
     var precipitationTypeCode: Int?
     var precipitationMM: Double?
 
+    /// C_L from the nearest METAR — the only genus any observation source
+    /// machine-reports, and only for convective low cloud. C_M/C_H aren't
+    /// available from anything, so they're never faked.
+    var lowCloudGenus: LowCloudGenus?
+    var genusStationICAO: String?
+
+    enum LowCloudGenus: String, Codable {
+        case toweringCumulus   // WMO C_L = 2
+        case cumulonimbus      // WMO C_L = 9
+    }
+
     /// Cloud cover in eighths, as the Python does it: `round(cloud / 12.5)`.
     var oktas: Int {
         min(8, max(0, Int((cloudCoverPercent / 12.5).rounded())))
@@ -173,12 +184,22 @@ struct StationObservation: Codable, Equatable {
         return "H \(Int(high.rounded()))°  L \(Int(low.rounded()))°"
     }
 
+    var genusText: String? {
+        guard let lowCloudGenus else { return nil }
+        let label = lowCloudGenus == .cumulonimbus ? "CB" : "TCU"
+        return genusStationICAO.map { "\(label) at \($0)" } ?? label
+    }
+
     var accessibilitySummary: String {
         var parts = ["\(roundedTemp) degrees", windText, "\(oktas) of 8 cloud"]
         if let effectivePrecip { parts.append(effectivePrecip.rawValue) }
         if let dew = dewPointRounded { parts.append("dew point \(dew)") }
         if let pressure = pressureMSLhPa {
             parts.append("\(Int(pressure.rounded())) hectopascals")
+        }
+        if let lowCloudGenus {
+            parts.append(lowCloudGenus == .cumulonimbus
+                         ? "cumulonimbus observed" : "towering cumulus observed")
         }
         if let highLowText { parts.append(highLowText) }
         return parts.joined(separator: ", ")
