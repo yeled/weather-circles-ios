@@ -15,10 +15,12 @@ import ImageIO
 let outputPath = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "/tmp/icon-1024.png"
 let size = 1024
 
+// noneSkipLast: opaque RGB — App Store validation rejects 1024 icons
+// that carry an alpha channel.
 let context = CGContext(data: nil, width: size, height: size,
                         bitsPerComponent: 8, bytesPerRow: 0,
                         space: CGColorSpace(name: CGColorSpace.sRGB)!,
-                        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+                        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
 context.translateBy(x: 0, y: CGFloat(size))
 context.scaleBy(x: 1, y: -1)                      // y-down, like the SVG space
 
