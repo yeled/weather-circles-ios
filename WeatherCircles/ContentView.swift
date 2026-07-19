@@ -7,6 +7,8 @@ struct ContentView: View {
 
     @State private var observation: StationObservation?
     @State private var errorText: String?
+    @State private var selectedCity: City? = CityStore.selected
+    @State private var showingCityPicker = false
 
     var body: some View {
         ScrollView {
@@ -18,6 +20,11 @@ struct ContentView: View {
                     .padding(.horizontal, 28)
                     .opacity(observation == nil ? 0.25 : 1)
                 readouts
+                if let slots = observation?.forecastSlots, !slots.isEmpty {
+                    ForecastRow(slots: slots)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 8)
+                }
                 Spacer(minLength: 24)
                 Link("Weather by Open-Meteo", destination: URL(string: "https://open-meteo.com")!)
                     .font(.footnote)
@@ -27,28 +34,62 @@ struct ContentView: View {
             .frame(maxWidth: .infinity)
         }
         .refreshable { await refresh() }
-        .task(id: location.coordinate.map { "\($0.latitude),\($0.longitude)" }) {
-            await refresh()
-        }
+        .task(id: fetchTrigger) { await refresh() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { location.refresh() }
+            if phase == .active && selectedCity == nil { location.refresh() }
         }
+        .sheet(isPresented: $showingCityPicker) {
+            CityPickerView(selected: selectedCity) { choice in
+                selectedCity = choice
+                CityStore.selected = choice
+                if let choice { CityStore.noteVisited(choice) }
+                showingCityPicker = false
+                if choice == nil { location.refresh() }
+            }
+        }
+    }
+
+    /// Refetch when the pinned city changes, or — in follow mode — when a
+    /// location fix arrives.
+    private var fetchTrigger: String {
+        if let city = selectedCity { return "city-\(city.id)" }
+        return location.coordinate.map { "gps-\($0.latitude),\($0.longitude)" } ?? "gps-pending"
     }
 
     private var header: some View {
         VStack(spacing: 2) {
-            Text(observation?.placeName ?? location.placeName ?? "—")
-                .font(.title2.weight(.semibold))
+            Button {
+                showingCityPicker = true
+            } label: {
+                HStack(spacing: 6) {
+                    if selectedCity == nil {
+                        Image(systemName: "location.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(displayName)
+                        .font(.title2.weight(.semibold))
+                    Image(systemName: "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .buttonStyle(.plain)
             if let observation {
                 Text("Updated \(observation.fetchedAt.formatted(.relative(presentation: .named)))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                Text(location.denied ? "Location off — showing London" : "Locating…")
+                Text(location.denied && selectedCity == nil
+                     ? "Location off — showing London" : "Loading…")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    private var displayName: String {
+        selectedCity?.name ?? observation?.placeName ?? location.placeName ?? "—"
     }
 
     private var readouts: some View {
@@ -80,7 +121,11 @@ struct ContentView: View {
         let latitude: Double
         let longitude: Double
         var name: String?
-        if let coordinate = location.coordinate {
+        if let city = selectedCity {
+            latitude = city.latitude
+            longitude = city.longitude
+            name = city.name
+        } else if let coordinate = location.coordinate {
             latitude = coordinate.latitude
             longitude = coordinate.longitude
             name = location.placeName

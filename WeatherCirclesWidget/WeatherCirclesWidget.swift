@@ -25,15 +25,20 @@ struct Provider: TimelineProvider {
         }
     }
 
-    /// Prefer the widget's own location fix; else the app's last coordinate;
-    /// else the original script's London default. Network errors fall back
-    /// to the cached observation so the circle never goes blank.
+    /// A pinned city wins; else the widget's own location fix; else the
+    /// app's last coordinate; else the original script's London default.
+    /// Network errors fall back to the cached observation so the circle
+    /// never goes blank.
     private func currentObservation() async -> StationObservation {
         var latitude: Double
         var longitude: Double
         var name: String?
 
-        if let coordinate = await WidgetLocationProvider.requestOneShot() {
+        if let city = CityStore.selected {
+            latitude = city.latitude
+            longitude = city.longitude
+            name = city.name
+        } else if let coordinate = await WidgetLocationProvider.requestOneShot() {
             latitude = coordinate.latitude
             longitude = coordinate.longitude
         } else if let cached = WeatherStore.loadCoordinate() {
