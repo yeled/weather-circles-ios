@@ -31,6 +31,7 @@ struct ContentView: View {
                     .foregroundStyle(.tertiary)
             }
             .padding(.vertical, 24)
+            .frame(maxWidth: 560)          // keeps the plot sane on iPad
             .frame(maxWidth: .infinity)
         }
         .refreshable { await refresh() }
@@ -146,6 +147,10 @@ struct ContentView: View {
             errorText = nil
             WeatherStore.save(fetched)
             WidgetCenter.shared.reloadAllTimelines()
+        } catch is CancellationError {
+            // A newer trigger (fresh GPS fix, city change) owns the UI now.
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            // Same: superseded mid-request by a newer refresh.
         } catch {
             errorText = "Fetch failed: \(error.localizedDescription)"
             if observation == nil { observation = WeatherStore.loadObservation() }
