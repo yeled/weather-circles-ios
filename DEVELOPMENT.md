@@ -194,10 +194,12 @@ Connect bump the build number on repeat uploads of the same version.
 
 ## 0.4: the 7-day page
 
-Swipe down from the main plot for the seven-day outlook; swipe up to
-come back (vertical paging). The paging gesture replaced
-pull-to-refresh — tap the "Updated…" caption to force a fetch; the app
-also refreshes on foreground and on any location/city change.
+Swipe up from the main plot for the seven-day outlook (titled with the
+location); swipe down to come back. Pull-to-refresh keeps the classic
+downward drag on the main page — the "Updated…" caption is also
+tappable to force a fetch, and the app refreshes on foreground and on
+any location/city change. (The first cut paged in the other direction;
+Charlie's thumbs overruled it.)
 
 One circle per day, aggregated honestly rather than averaged:
 

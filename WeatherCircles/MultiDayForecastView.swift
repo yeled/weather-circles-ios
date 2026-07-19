@@ -4,12 +4,22 @@ import SwiftUI
 /// weather code, mean cloud cover, max wind with dominant direction.
 struct MultiDayForecastView: View {
     let days: [StationObservation.DailyForecast]
+    let placeName: String
 
     var body: some View {
         VStack(spacing: 6) {
             Spacer(minLength: 8)
-            Text("Next 7 days")
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.compact.up")
+                Text("now")
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            Text(placeName)
                 .font(.title3.weight(.semibold))
+            Text("Next 7 days")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             if days.isEmpty {
                 Spacer()
                 Text("Loading…")
@@ -22,12 +32,6 @@ struct MultiDayForecastView: View {
                     dayRow(day, isToday: index == 0)
                 }
                 Spacer(minLength: 8)
-                HStack(spacing: 4) {
-                    Image(systemName: "chevron.compact.down")
-                    Text("now")
-                }
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
             }
             Spacer(minLength: 10)
         }
@@ -107,5 +111,5 @@ private func previewDays() -> [StationObservation.DailyForecast] {
 }
 
 #Preview {
-    MultiDayForecastView(days: previewDays())
+    MultiDayForecastView(days: previewDays(), placeName: "London")
 }
