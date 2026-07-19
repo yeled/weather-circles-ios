@@ -45,11 +45,19 @@ enum OpenMeteoClient {
             let time: [String]
             let pressureMsl: [Double?]?
             let weatherCode: [Int?]?
+            let temperature2m: [Double?]?
+            let cloudCover: [Double?]?
+            let windSpeed10m: [Double?]?
+            let windDirection10m: [Double?]?
 
             enum CodingKeys: String, CodingKey {
                 case time
                 case pressureMsl = "pressure_msl"
                 case weatherCode = "weather_code"
+                case temperature2m = "temperature_2m"
+                case cloudCover = "cloud_cover"
+                case windSpeed10m = "wind_speed_10m"
+                case windDirection10m = "wind_direction_10m"
             }
         }
 
@@ -75,10 +83,10 @@ enum OpenMeteoClient {
             .init(name: "latitude", value: String(format: "%.4f", latitude)),
             .init(name: "longitude", value: String(format: "%.4f", longitude)),
             .init(name: "current", value: "weather_code,temperature_2m,cloud_cover,wind_speed_10m,wind_direction_10m,dew_point_2m,pressure_msl,precipitation,precipitation_type,visibility"),
-            .init(name: "hourly", value: "pressure_msl,weather_code"),
+            .init(name: "hourly", value: "pressure_msl,weather_code,temperature_2m,cloud_cover,wind_speed_10m,wind_direction_10m"),
             .init(name: "past_hours", value: "6"),
             .init(name: "daily", value: "temperature_2m_max,temperature_2m_min"),
-            .init(name: "forecast_days", value: "1"),
+            .init(name: "forecast_days", value: "2"),
             .init(name: "wind_speed_unit", value: "kn"),
             .init(name: "timezone", value: "auto"),
         ]
@@ -96,6 +104,7 @@ enum OpenMeteoClient {
         var tendency: StationObservation.PressureTendency?
         var change3h: Double?
         var pastCode: Int?
+        var slots: [StationObservation.ForecastSlot]?
         if let hourly = decoded.hourly {
             let hourPrefix = String(decoded.current.time.prefix(13))
             if let idx = hourly.time.firstIndex(where: { $0.hasPrefix(hourPrefix) }) {
@@ -116,6 +125,38 @@ enum OpenMeteoClient {
                                 .map { (code, StationObservation.severity(of: $0)) }
                         }
                         .max { $0.1 < $1.1 }?.0
+                }
+                // TRMNL rolling slots: 8 × 2 h from the current hour, each
+                // showing its window's most significant hour — ranked by
+                // precip severity, falling back to the cloudiest (the
+                // plugin's rule, so a shower between slots still shows up).
+                if let temps = hourly.temperature2m, let clouds = hourly.cloudCover,
+                   let winds = hourly.windSpeed10m, let dirs = hourly.windDirection10m,
+                   let codes = hourly.weatherCode {
+                    func significance(_ i: Int) -> Double {
+                        let code = codes.indices.contains(i) ? (codes[i] ?? 0) : 0
+                        let cloud = clouds.indices.contains(i) ? (clouds[i] ?? 0) : 0
+                        let severity = StationObservation.precipKey(forWMOCode: code)
+                            .map(StationObservation.severity(of:)) ?? 0
+                        return Double(severity) * 1000 + cloud
+                    }
+                    var built: [StationObservation.ForecastSlot] = []
+                    for slot in 0..<8 {
+                        let start = idx + slot * 2
+                        let window = [start, start + 1].filter { temps.indices.contains($0) }
+                        guard hourly.time.indices.contains(start),
+                              let hour = Int(hourly.time[start].dropFirst(11).prefix(2)),
+                              let pick = window.max(by: { significance($0) < significance($1) }),
+                              let temp = temps[pick] else { continue }
+                        built.append(StationObservation.ForecastSlot(
+                            localHour: hour,
+                            temperatureC: temp,
+                            weatherCode: (codes.indices.contains(pick) ? codes[pick] : nil) ?? 0,
+                            cloudCoverPercent: (clouds.indices.contains(pick) ? clouds[pick] : nil) ?? 0,
+                            windSpeedKnots: (winds.indices.contains(pick) ? winds[pick] : nil) ?? 0,
+                            windFromDegrees: (dirs.indices.contains(pick) ? dirs[pick] : nil) ?? 0))
+                    }
+                    if !built.isEmpty { slots = built }
                 }
             }
         }
@@ -139,6 +180,7 @@ enum OpenMeteoClient {
             pastSignificantWeatherCode: pastCode,
             visibilityMeters: decoded.current.visibility,
             precipitationTypeCode: decoded.current.precipitationType.map { Int($0) },
-            precipitationMM: decoded.current.precipitation)
+            precipitationMM: decoded.current.precipitation,
+            forecastSlots: slots)
     }
 }

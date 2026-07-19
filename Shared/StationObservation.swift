@@ -45,6 +45,31 @@ struct StationObservation: Codable, Equatable {
         case cumulonimbus      // WMO C_L = 9
     }
 
+    /// TRMNL-style rolling forecast: eight 2-hour slots from the current
+    /// hour, each carrying its window's most significant hour.
+    var forecastSlots: [ForecastSlot]?
+
+    struct ForecastSlot: Codable, Equatable {
+        var localHour: Int      // slot start, in the location's own timezone
+        var temperatureC: Double
+        var weatherCode: Int
+        var cloudCoverPercent: Double
+        var windSpeedKnots: Double
+        var windFromDegrees: Double
+
+        var hourLabel: String { String(format: "%02d", localHour) }
+
+        /// A minimal observation so StationPlot can draw the mini circle.
+        func asObservation() -> StationObservation {
+            StationObservation(
+                fetchedAt: .distantPast, latitude: 0, longitude: 0,
+                temperatureC: temperatureC, weatherCode: weatherCode,
+                cloudCoverPercent: cloudCoverPercent,
+                windSpeedKnots: windSpeedKnots,
+                windFromDegrees: windFromDegrees)
+        }
+    }
+
     /// Cloud cover in eighths, as the Python does it: `round(cloud / 12.5)`.
     var oktas: Int {
         min(8, max(0, Int((cloudCoverPercent / 12.5).rounded())))
