@@ -191,3 +191,25 @@ xcodebuild -exportArchive -archivePath /tmp/WeatherCircles.xcarchive \
 
 `manageAppVersionAndBuildNumber` in the export options lets App Store
 Connect bump the build number on repeat uploads of the same version.
+
+## 0.4: the 7-day page
+
+Swipe up from the main plot for the seven-day outlook (titled with the
+location); swipe down to come back. Pull-to-refresh keeps the classic
+downward drag on the main page — the "Updated…" caption is also
+tappable to force a fetch, and the app refreshes on foreground and on
+any location/city change. (The first cut paged in the other direction;
+Charlie's thumbs overruled it.)
+
+One circle per day, aggregated honestly rather than averaged:
+
+- **ww glyph** — the day's *most severe* weather code (Open-Meteo's
+  daily semantics; the same instinct as the TRMNL slot rule).
+- **Okta fill** — *mean* cloud cover. An okta is an areal average by
+  nature, so the mean is the one place averaging is true to the form.
+- **Barb** — the day's *max* wind at the *dominant* direction. A mean
+  barb would lie about gusty days.
+- **Margins** — H/L and the precipitation sum, RRR-style.
+
+Never a flat average of everything: that washes a
+morning-fog-then-thunderstorm day into meaningless drizzle.

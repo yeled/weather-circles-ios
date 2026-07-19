@@ -62,12 +62,24 @@ enum OpenMeteoClient {
         }
 
         struct Daily: Decodable {
-            let temperature2mMax: [Double]
-            let temperature2mMin: [Double]
+            let time: [String]
+            let temperature2mMax: [Double?]
+            let temperature2mMin: [Double?]
+            let weatherCode: [Int?]?
+            let windSpeed10mMax: [Double?]?
+            let windDirection10mDominant: [Double?]?
+            let precipitationSum: [Double?]?
+            let cloudCoverMean: [Double?]?
 
             enum CodingKeys: String, CodingKey {
+                case time
                 case temperature2mMax = "temperature_2m_max"
                 case temperature2mMin = "temperature_2m_min"
+                case weatherCode = "weather_code"
+                case windSpeed10mMax = "wind_speed_10m_max"
+                case windDirection10mDominant = "wind_direction_10m_dominant"
+                case precipitationSum = "precipitation_sum"
+                case cloudCoverMean = "cloud_cover_mean"
             }
         }
 
@@ -85,8 +97,8 @@ enum OpenMeteoClient {
             .init(name: "current", value: "weather_code,temperature_2m,cloud_cover,wind_speed_10m,wind_direction_10m,dew_point_2m,pressure_msl,precipitation,precipitation_type,visibility"),
             .init(name: "hourly", value: "pressure_msl,weather_code,temperature_2m,cloud_cover,wind_speed_10m,wind_direction_10m"),
             .init(name: "past_hours", value: "6"),
-            .init(name: "daily", value: "temperature_2m_max,temperature_2m_min"),
-            .init(name: "forecast_days", value: "2"),
+            .init(name: "daily", value: "weather_code,temperature_2m_max,temperature_2m_min,wind_speed_10m_max,wind_direction_10m_dominant,precipitation_sum,cloud_cover_mean"),
+            .init(name: "forecast_days", value: "7"),
             .init(name: "wind_speed_unit", value: "kn"),
             .init(name: "timezone", value: "auto"),
         ]
@@ -105,6 +117,37 @@ enum OpenMeteoClient {
         var change3h: Double?
         var pastCode: Int?
         var slots: [StationObservation.ForecastSlot]?
+
+        // Seven-day outlook from the daily aggregates (see DailyForecast
+        // for the severity/mean/max aggregation rationale).
+        var days: [StationObservation.DailyForecast]?
+        if let daily = decoded.daily {
+            func value(_ array: [Double?]?, _ i: Int) -> Double {
+                guard let array, array.indices.contains(i) else { return 0 }
+                return array[i] ?? 0
+            }
+            var built: [StationObservation.DailyForecast] = []
+            for i in daily.time.indices {
+                guard daily.temperature2mMax.indices.contains(i),
+                      let high = daily.temperature2mMax[i],
+                      daily.temperature2mMin.indices.contains(i),
+                      let low = daily.temperature2mMin[i] else { continue }
+                var code = 0
+                if let codes = daily.weatherCode, codes.indices.contains(i) {
+                    code = codes[i] ?? 0
+                }
+                built.append(StationObservation.DailyForecast(
+                    dateISO: daily.time[i],
+                    highC: high,
+                    lowC: low,
+                    weatherCode: code,
+                    cloudCoverMeanPercent: value(daily.cloudCoverMean, i),
+                    windMaxKnots: value(daily.windSpeed10mMax, i),
+                    windDominantDegrees: value(daily.windDirection10mDominant, i),
+                    precipitationSumMM: value(daily.precipitationSum, i)))
+            }
+            if !built.isEmpty { days = built }
+        }
         if let hourly = decoded.hourly {
             let hourPrefix = String(decoded.current.time.prefix(13))
             if let idx = hourly.time.firstIndex(where: { $0.hasPrefix(hourPrefix) }) {
@@ -171,8 +214,8 @@ enum OpenMeteoClient {
             cloudCoverPercent: decoded.current.cloudCover ?? 0,
             windSpeedKnots: decoded.current.windSpeed10m ?? 0,
             windFromDegrees: decoded.current.windDirection10m ?? 0,
-            todayHighC: decoded.daily?.temperature2mMax.first,
-            todayLowC: decoded.daily?.temperature2mMin.first,
+            todayHighC: decoded.daily?.temperature2mMax.first ?? nil,
+            todayLowC: decoded.daily?.temperature2mMin.first ?? nil,
             dewPointC: decoded.current.dewPoint2m,
             pressureMSLhPa: decoded.current.pressureMsl,
             pressureChange3hPa: change3h,
@@ -181,6 +224,7 @@ enum OpenMeteoClient {
             visibilityMeters: decoded.current.visibility,
             precipitationTypeCode: decoded.current.precipitationType.map { Int($0) },
             precipitationMM: decoded.current.precipitation,
-            forecastSlots: slots)
+            forecastSlots: slots,
+            dailyForecast: days)
     }
 }

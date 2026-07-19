@@ -12,29 +12,22 @@ struct ContentView: View {
     @State private var refreshTask: Task<Void, Never>?
 
     var body: some View {
+        // Two vertically paged screens: swipe up from the main plot for
+        // the 7-day outlook, swipe down to come back. Pull-to-refresh
+        // keeps the classic downward drag at the top of the main page.
         ScrollView {
-            VStack(spacing: 12) {
-                header
-                StationPlot(observation: observation ?? .sample,
-                            fullStationModel: true,
-                            haloColor: Color(uiColor: .systemBackground))
-                    .padding(.horizontal, 28)
-                    .opacity(observation == nil ? 0.25 : 1)
-                readouts
-                if let slots = observation?.forecastSlots, !slots.isEmpty {
-                    ForecastRow(slots: slots)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                }
-                Spacer(minLength: 24)
-                Link("Weather by Open-Meteo", destination: URL(string: "https://open-meteo.com")!)
-                    .font(.footnote)
-                    .foregroundStyle(.tertiary)
+            VStack(spacing: 0) {
+                mainPage
+                    .containerRelativeFrame(.vertical)
+                MultiDayForecastView(days: observation?.dailyForecast ?? [],
+                                     placeName: displayName)
+                    .frame(maxWidth: 560)
+                    .frame(maxWidth: .infinity)
+                    .containerRelativeFrame(.vertical)
             }
-            .padding(.vertical, 24)
-            .frame(maxWidth: 560)          // keeps the plot sane on iPad
-            .frame(maxWidth: .infinity)
         }
+        .scrollTargetBehavior(.paging)
+        .scrollIndicators(.hidden)
         .refreshable { await refresh() }
         .task { await refresh() }
         .onChange(of: gpsFix) { _, _ in
@@ -63,6 +56,36 @@ struct ContentView: View {
                 refreshNow()
             }
         }
+    }
+
+    private var mainPage: some View {
+        VStack(spacing: 12) {
+            header
+            StationPlot(observation: observation ?? .sample,
+                        fullStationModel: true,
+                        haloColor: Color(uiColor: .systemBackground))
+                .padding(.horizontal, 28)
+                .opacity(observation == nil ? 0.25 : 1)
+            readouts
+            if let slots = observation?.forecastSlots, !slots.isEmpty {
+                ForecastRow(slots: slots)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+            }
+            Spacer(minLength: 12)
+            Link("Weather by Open-Meteo", destination: URL(string: "https://open-meteo.com")!)
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+            VStack(spacing: 0) {
+                Text("7 days")
+                Image(systemName: "chevron.compact.down")
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 16)
+        .frame(maxWidth: 560)          // keeps the plot sane on iPad
+        .frame(maxWidth: .infinity)
     }
 
     private var gpsFix: String {
@@ -102,9 +125,12 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             if let observation {
-                Text("Updated \(observation.fetchedAt.formatted(.relative(presentation: .named)))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Button { refreshNow() } label: {
+                    Text("Updated \(observation.fetchedAt.formatted(.relative(presentation: .named)))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
             } else {
                 Text(location.denied && selectedCity == nil
                      ? "Location off — showing London" : "Loading…")

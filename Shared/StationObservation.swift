@@ -70,6 +70,41 @@ struct StationObservation: Codable, Equatable {
         }
     }
 
+    /// Seven-day outlook. Aggregation philosophy: discrete weather takes
+    /// the day's *most severe* code (Open-Meteo's daily semantics — the
+    /// same instinct as the TRMNL slot rule), cloud cover takes the
+    /// *mean* (an okta is an areal average by nature), wind takes the
+    /// day's *max* speed with the dominant direction — a mean barb would
+    /// lie about gusty days. Never a flat average of everything: that
+    /// washes morning-fog-then-thunderstorm into meaningless drizzle.
+    var dailyForecast: [DailyForecast]?
+
+    struct DailyForecast: Codable, Equatable {
+        var dateISO: String      // "2026-07-19", location-local
+        var highC: Double
+        var lowC: Double
+        var weatherCode: Int
+        var cloudCoverMeanPercent: Double
+        var windMaxKnots: Double
+        var windDominantDegrees: Double
+        var precipitationSumMM: Double
+
+        /// A minimal observation so StationPlot can draw the day circle.
+        func asObservation() -> StationObservation {
+            StationObservation(
+                fetchedAt: .distantPast, latitude: 0, longitude: 0,
+                temperatureC: highC, weatherCode: weatherCode,
+                cloudCoverPercent: cloudCoverMeanPercent,
+                windSpeedKnots: windMaxKnots,
+                windFromDegrees: windDominantDegrees)
+        }
+
+        var windText: String {
+            windMaxKnots < 1 ? "Calm"
+                : "\(StationObservation.compassPoint(for: windDominantDegrees)) \(Int(windMaxKnots.rounded()))"
+        }
+    }
+
     /// Cloud cover in eighths, as the Python does it: `round(cloud / 12.5)`.
     var oktas: Int {
         min(8, max(0, Int((cloudCoverPercent / 12.5).rounded())))
@@ -193,12 +228,14 @@ struct StationObservation: Codable, Equatable {
         return "\(Int((v / 1000).rounded())) km"
     }
 
-    var compassPoint: String {
+    static func compassPoint(for degrees: Double) -> String {
         let points = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
                       "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
-        let index = Int((windFromDegrees / 22.5).rounded()) % 16
+        let index = Int((degrees / 22.5).rounded()) % 16
         return points[(index + 16) % 16]
     }
+
+    var compassPoint: String { Self.compassPoint(for: windFromDegrees) }
 
     var windText: String {
         windSpeedKnots < 1 ? "Calm" : "\(compassPoint) \(Int(windSpeedKnots.rounded())) kn"
