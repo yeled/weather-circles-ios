@@ -117,3 +117,20 @@ widget after each fetch.
 
 Weather data by [Open-Meteo](https://open-meteo.com) (CC-BY 4.0), no API key
 required.
+
+## Updating the README screenshot
+
+`docs/screenshot.png` on `main` should always show the current app. After
+any visual change:
+
+```sh
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+xcodebuild -project WeatherCircles.xcodeproj -scheme WeatherCircles \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+xcrun simctl boot <udid>
+xcrun simctl install booted \
+  ~/Library/Developer/Xcode/DerivedData/WeatherCircles-*/Build/Products/Debug-iphonesimulator/WeatherCircles.app
+xcrun simctl location booted set 51.5074,-0.1278
+xcrun simctl launch booted com.evilforbeginners.WeatherCircles
+sleep 8 && xcrun simctl io booted screenshot docs/screenshot.png
+```
