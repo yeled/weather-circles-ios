@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var errorText: String?
     @State private var selectedCity: City? = CityStore.selected
     @State private var showingCityPicker = false
+    @State private var refreshTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
@@ -35,26 +36,50 @@ struct ContentView: View {
             .frame(maxWidth: .infinity)
         }
         .refreshable { await refresh() }
-        .task(id: fetchTrigger) { await refresh() }
+        .task { await refresh() }
+        .onChange(of: gpsFix) { _, _ in
+            // A follow-mode location fix arrived (or moved).
+            if selectedCity == nil { refreshNow() }
+        }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active && selectedCity == nil { location.refresh() }
+            guard phase == .active else { return }
+            if selectedCity == nil { location.refresh() } else { refreshNow() }
         }
         .sheet(isPresented: $showingCityPicker) {
             CityPickerView(selected: selectedCity) { choice in
                 selectedCity = choice
                 CityStore.selected = choice
-                if let choice { CityStore.noteVisited(choice) }
+                errorText = nil
+                if let choice {
+                    CityStore.noteVisited(choice)
+                    // Instant swap to the city's last-known plot ("Updated
+                    // X ago" stays honest); the live fetch replaces it.
+                    observation = WeatherStore.loadObservation(cityID: choice.id)
+                } else {
+                    observation = nil
+                    location.refresh()
+                }
                 showingCityPicker = false
-                if choice == nil { location.refresh() }
+                refreshNow()
             }
         }
     }
 
-    /// Refetch when the pinned city changes, or — in follow mode — when a
-    /// location fix arrives.
-    private var fetchTrigger: String {
-        if let city = selectedCity { return "city-\(city.id)" }
-        return location.coordinate.map { "gps-\($0.latitude),\($0.longitude)" } ?? "gps-pending"
+    private var gpsFix: String {
+        location.coordinate.map { "\($0.latitude),\($0.longitude)" } ?? "pending"
+    }
+
+    /// What the in-flight fetch is for — lets a finished fetch check it
+    /// hasn't been superseded by a newer selection before committing.
+    private var selectionSignature: String {
+        selectedCity.map { "city-\($0.id)" } ?? "follow"
+    }
+
+    /// Cancel any in-flight fetch and start a fresh one. Selection changes
+    /// call this directly rather than relying on view-modifier diffing.
+    private func refreshNow() {
+        refreshTask?.cancel()
+        refreshTask = Task { await refresh() }
     }
 
     private var header: some View {
@@ -139,13 +164,15 @@ struct ContentView: View {
             name = LocationProvider.fallback.name
         }
 
+        let signature = selectionSignature
         do {
             var fetched = try await WeatherService.fetch(
                 latitude: latitude, longitude: longitude, placeName: name)
+            guard signature == selectionSignature else { return }  // superseded
             if fetched.placeName == nil { fetched.placeName = location.placeName }
             observation = fetched
             errorText = nil
-            WeatherStore.save(fetched)
+            WeatherStore.save(fetched, cityID: selectedCity?.id)
             WidgetCenter.shared.reloadAllTimelines()
         } catch is CancellationError {
             // A newer trigger (fresh GPS fix, city change) owns the UI now.

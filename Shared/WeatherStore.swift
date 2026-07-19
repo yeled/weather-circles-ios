@@ -15,14 +15,23 @@ enum WeatherStore {
         UserDefaults(suiteName: appGroupID) ?? .standard
     }
 
-    static func save(_ observation: StationObservation) {
-        if let data = try? JSONEncoder().encode(observation) {
-            defaults.set(data, forKey: observationKey)
+    static func save(_ observation: StationObservation, cityID: Int? = nil) {
+        guard let data = try? JSONEncoder().encode(observation) else { return }
+        defaults.set(data, forKey: observationKey)
+        if let cityID {
+            defaults.set(data, forKey: "observation-city-\(cityID)")
         }
     }
 
     static func loadObservation() -> StationObservation? {
         guard let data = defaults.data(forKey: observationKey) else { return nil }
+        return try? JSONDecoder().decode(StationObservation.self, from: data)
+    }
+
+    /// Last observation fetched for a pinned city — shown instantly when
+    /// the city is re-chosen, while the live fetch replaces it.
+    static func loadObservation(cityID: Int) -> StationObservation? {
+        guard let data = defaults.data(forKey: "observation-city-\(cityID)") else { return nil }
         return try? JSONDecoder().decode(StationObservation.self, from: data)
     }
 
