@@ -12,30 +12,22 @@ struct ContentView: View {
     @State private var refreshTask: Task<Void, Never>?
 
     var body: some View {
+        // Two vertically paged screens: swipe down from the main plot for
+        // the 7-day outlook, swipe up to come back. (This gesture replaces
+        // pull-to-refresh — tap the "Updated…" caption to force a fetch.)
         ScrollView {
-            VStack(spacing: 12) {
-                header
-                StationPlot(observation: observation ?? .sample,
-                            fullStationModel: true,
-                            haloColor: Color(uiColor: .systemBackground))
-                    .padding(.horizontal, 28)
-                    .opacity(observation == nil ? 0.25 : 1)
-                readouts
-                if let slots = observation?.forecastSlots, !slots.isEmpty {
-                    ForecastRow(slots: slots)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 8)
-                }
-                Spacer(minLength: 24)
-                Link("Weather by Open-Meteo", destination: URL(string: "https://open-meteo.com")!)
-                    .font(.footnote)
-                    .foregroundStyle(.tertiary)
+            VStack(spacing: 0) {
+                MultiDayForecastView(days: observation?.dailyForecast ?? [])
+                    .frame(maxWidth: 560)
+                    .frame(maxWidth: .infinity)
+                    .containerRelativeFrame(.vertical)
+                mainPage
+                    .containerRelativeFrame(.vertical)
             }
-            .padding(.vertical, 24)
-            .frame(maxWidth: 560)          // keeps the plot sane on iPad
-            .frame(maxWidth: .infinity)
         }
-        .refreshable { await refresh() }
+        .scrollTargetBehavior(.paging)
+        .defaultScrollAnchor(.bottom)
+        .scrollIndicators(.hidden)
         .task { await refresh() }
         .onChange(of: gpsFix) { _, _ in
             // A follow-mode location fix arrived (or moved).
@@ -63,6 +55,36 @@ struct ContentView: View {
                 refreshNow()
             }
         }
+    }
+
+    private var mainPage: some View {
+        VStack(spacing: 12) {
+            VStack(spacing: 0) {
+                Image(systemName: "chevron.compact.up")
+                Text("7 days")
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            header
+            StationPlot(observation: observation ?? .sample,
+                        fullStationModel: true,
+                        haloColor: Color(uiColor: .systemBackground))
+                .padding(.horizontal, 28)
+                .opacity(observation == nil ? 0.25 : 1)
+            readouts
+            if let slots = observation?.forecastSlots, !slots.isEmpty {
+                ForecastRow(slots: slots)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+            }
+            Spacer(minLength: 12)
+            Link("Weather by Open-Meteo", destination: URL(string: "https://open-meteo.com")!)
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+        }
+        .padding(.vertical, 16)
+        .frame(maxWidth: 560)          // keeps the plot sane on iPad
+        .frame(maxWidth: .infinity)
     }
 
     private var gpsFix: String {
@@ -102,9 +124,12 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             if let observation {
-                Text("Updated \(observation.fetchedAt.formatted(.relative(presentation: .named)))")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Button { refreshNow() } label: {
+                    Text("Updated \(observation.fetchedAt.formatted(.relative(presentation: .named)))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
             } else {
                 Text(location.denied && selectedCity == nil
                      ? "Location off — showing London" : "Loading…")
