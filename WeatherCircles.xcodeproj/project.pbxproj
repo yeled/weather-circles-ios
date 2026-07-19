@@ -294,6 +294,7 @@
 				CODE_SIGN_ENTITLEMENTS = Config/WeatherCircles.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SA2SS4242K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Weather Circles";
@@ -323,6 +324,7 @@
 				CODE_SIGN_ENTITLEMENTS = Config/WeatherCircles.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SA2SS4242K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Weather Circles";
@@ -350,6 +352,7 @@
 				CODE_SIGN_ENTITLEMENTS = Config/WeatherCirclesWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SA2SS4242K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/WeatherCirclesWidget-Info.plist";
@@ -374,6 +377,7 @@
 				CODE_SIGN_ENTITLEMENTS = Config/WeatherCirclesWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = SA2SS4242K;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/WeatherCirclesWidget-Info.plist";
