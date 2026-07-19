@@ -301,6 +301,44 @@ struct StationPlot: View {
                          at: CGPoint(x: G.cx - G.r - 22, y: presentWeatherAnchorY - 26),
                          anchor: .trailing)
         }
+        // C_L — observed convective low-cloud genus (nearest METAR),
+        // below the circle. When a southerly barb owns bottom-centre,
+        // it moves to the lower-left diagonal — W₁'s mirror slot.
+        if let genus = observation.lowCloudGenus {
+            var base = CGPoint(x: G.cx, y: G.cy + G.r + 34)
+            let wdir = observation.windFromDegrees * .pi / 180
+            if observation.windSpeedKnots >= 1 && -cos(wdir) > 0.8 {
+                base = CGPoint(x: G.cx - (G.r + 30) * 0.7071,
+                               y: G.cy + (G.r + 30) * 0.7071)
+            }
+            drawGenusGlyph(&context, genus, at: base, ink: ink)
+        }
+    }
+
+    /// WMO C_L glyphs: 2 (towering cumulus — tall dome on a base line)
+    /// and 9 (cumulonimbus — tower with the anvil top).
+    private func drawGenusGlyph(_ context: inout GraphicsContext,
+                                _ genus: StationObservation.LowCloudGenus,
+                                at base: CGPoint, ink: Color) {
+        var path = Path()
+        path.move(to: CGPoint(x: base.x - 11, y: base.y))
+        path.addLine(to: CGPoint(x: base.x + 11, y: base.y))
+        switch genus {
+        case .toweringCumulus:
+            path.move(to: CGPoint(x: base.x - 8, y: base.y))
+            path.addCurve(to: CGPoint(x: base.x + 8, y: base.y),
+                          control1: CGPoint(x: base.x - 10, y: base.y - 24),
+                          control2: CGPoint(x: base.x + 10, y: base.y - 24))
+        case .cumulonimbus:
+            path.move(to: CGPoint(x: base.x - 7, y: base.y))
+            path.addLine(to: CGPoint(x: base.x - 4, y: base.y - 16))
+            path.move(to: CGPoint(x: base.x + 7, y: base.y))
+            path.addLine(to: CGPoint(x: base.x + 4, y: base.y - 16))
+            path.move(to: CGPoint(x: base.x - 12, y: base.y - 16))
+            path.addLine(to: CGPoint(x: base.x + 12, y: base.y - 16))
+        }
+        context.stroke(path, with: .color(ink),
+                       style: StrokeStyle(lineWidth: 3.5, lineCap: .round, lineJoin: .round))
     }
 
     /// The WMO "a" barograph-trace shapes, as small polylines.
@@ -440,6 +478,16 @@ private extension Color {
 
 #Preview("Repo circle (widget style)") {
     StationPlot(observation: .sample, haloColor: Color(uiColor: .systemBackground))
+        .padding(40)
+}
+
+#Preview("Cb observed — storm day") {
+    var obs = StationObservation.sample
+    obs.weatherCode = 95
+    obs.lowCloudGenus = .cumulonimbus
+    obs.genusStationICAO = "EGLL"
+    return StationPlot(observation: obs, fullStationModel: true,
+                       haloColor: Color(uiColor: .systemBackground))
         .padding(40)
 }
 
