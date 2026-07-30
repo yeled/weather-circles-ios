@@ -10,6 +10,10 @@ struct ContentView: View {
     @State private var selectedCity: City? = CityStore.selected
     @State private var showingCityPicker = false
     @State private var refreshTask: Task<Void, Never>?
+    @State private var explainedSlot: StationSlot?
+    @State private var showingGuide = false
+    /// The "tap the circle" nudge earns its line of screen once.
+    @AppStorage("guideHintSeen") private var guideHintSeen = false
 
     var body: some View {
         // Two vertically paged screens: swipe up from the main plot for
@@ -56,6 +60,19 @@ struct ContentView: View {
                 refreshNow()
             }
         }
+        .sheet(item: $explainedSlot) { slot in
+            StationSlotDetail(slot: slot, observation: observation ?? .sample)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingGuide) {
+            StationGuideView(observation: observation ?? .sample)
+        }
+    }
+
+    private func explain(_ slot: StationSlot) {
+        guideHintSeen = true
+        explainedSlot = slot
     }
 
     private var mainPage: some View {
@@ -63,9 +80,16 @@ struct ContentView: View {
             header
             StationPlot(observation: observation ?? .sample,
                         fullStationModel: true,
-                        haloColor: Color(uiColor: .systemBackground))
+                        haloColor: Color(uiColor: .systemBackground),
+                        highlightedSlot: explainedSlot,
+                        onSelectSlot: explain)
                 .padding(.horizontal, 28)
                 .opacity(observation == nil ? 0.25 : 1)
+            if !guideHintSeen {
+                Text("Tap any part of the circle to see what it means")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
             readouts
             if let slots = observation?.forecastSlots, !slots.isEmpty {
                 ForecastRow(slots: slots)
@@ -73,9 +97,18 @@ struct ContentView: View {
                     .padding(.top, 8)
             }
             Spacer(minLength: 12)
-            Link("Weather by Open-Meteo", destination: URL(string: "https://open-meteo.com")!)
-                .font(.footnote)
-                .foregroundStyle(.tertiary)
+            HStack(spacing: 16) {
+                Button {
+                    guideHintSeen = true
+                    showingGuide = true
+                } label: {
+                    Label("What am I looking at?", systemImage: "questionmark.circle")
+                }
+                .buttonStyle(.plain)
+                Link("Weather by Open-Meteo", destination: URL(string: "https://open-meteo.com")!)
+            }
+            .font(.footnote)
+            .foregroundStyle(.tertiary)
             VStack(spacing: 0) {
                 Text("7 days")
                 Image(systemName: "chevron.compact.down")
