@@ -1,0 +1,8 @@
+app_identifier("com.evilforbeginners.WeatherCircles")
+
+# No apple_id here on purpose: auth is an App Store Connect API key (see
+# the Fastfile header), so nothing needs an Apple ID — and this repo is
+# public, so an email address left here would be published with it.
+#
+# For more information about the Appfile, see:
+#     https://docs.fastlane.tools/advanced/#appfile

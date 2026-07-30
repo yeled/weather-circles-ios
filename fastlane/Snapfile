@@ -1,0 +1,36 @@
+# Screenshot capture. See `fastlane screenshots`.
+#
+# One device per App Store display class — ASC rejects anything that isn't
+# an exact pixel size for its slot, and it asks for the 6.5" set by name:
+#
+#   iPhone 14 Plus         1284 × 2778   6.5"
+#   iPhone 17 Pro Max      1320 × 2868   6.9"
+#   iPad Pro 13-inch (M5)  2064 × 2752   iPad 13"
+#
+# The lane creates any of these simulators that don't already exist.
+devices([
+  "iPhone 14 Plus",
+  "iPhone 17 Pro Max",
+  "iPad Pro 13-inch (M5)"
+])
+
+languages(["en-US"])
+
+scheme("WeatherCircles")
+
+output_directory("./fastlane/screenshots")
+clear_previous_screenshots(true)
+
+# The app's one-time "tap any part of the circle" nudge retires itself once
+# the guide is opened — and the test opens it. Without a wipe, every run
+# after the first would silently lose that line from the main screenshot.
+erase_simulator(true)
+
+# 9:41, full bars, no clock drift between devices.
+override_status_bar(true)
+
+# Only the UI test that exists to take screenshots.
+only_testing(["WeatherCirclesUITests/ScreenshotTests"])
+
+concurrent_simulators(false)   # each run erases and relaunches; keep it serial
+stop_after_first_error(true)
