@@ -216,7 +216,7 @@ One circle per day, aggregated honestly rather than averaged:
 Never a flat average of everything: that washes a
 morning-fog-then-thunderstorm day into meaningless drizzle.
 
-## 0.5: the plot explains itself
+## 1.0: the plot explains itself
 
 The station model is only readable if you already know it, so every piece
 of it is now tappable. Tap the barb and you get the wind page; tap the
