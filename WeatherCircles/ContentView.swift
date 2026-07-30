@@ -19,20 +19,28 @@ struct ContentView: View {
         // Two vertically paged screens: swipe up from the main plot for
         // the 7-day outlook, swipe down to come back. Pull-to-refresh
         // keeps the classic downward drag at the top of the main page.
-        ScrollView {
-            VStack(spacing: 0) {
-                mainPage
-                    .containerRelativeFrame(.vertical)
-                MultiDayForecastView(days: observation?.dailyForecast ?? [],
-                                     placeName: displayName)
-                    .frame(maxWidth: 560)
-                    .frame(maxWidth: .infinity)
-                    .containerRelativeFrame(.vertical)
+        // A page is sized to the whole window, not to the safe area, and
+        // insets itself. Sized to the safe area it was 81pt shorter than
+        // the window it pages through, so at the bottom of the scroll the
+        // leftover had to be filled by whatever sat above — the main
+        // page's footer, stranded in the status bar strip. (Nobody noticed
+        // on page 1: what's above *it* is blank.)
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(spacing: 0) {
+                    page(mainPage, in: proxy)
+                    page(MultiDayForecastView(days: observation?.dailyForecast ?? [],
+                                              placeName: displayName)
+                            .frame(maxWidth: 560)
+                            .frame(maxWidth: .infinity),
+                         in: proxy)
+                }
             }
+            .scrollTargetBehavior(.paging)
+            .scrollIndicators(.hidden)
+            .refreshable { await refresh() }
         }
-        .scrollTargetBehavior(.paging)
-        .scrollIndicators(.hidden)
-        .refreshable { await refresh() }
+        .ignoresSafeArea()      // so the proxy reports the real insets
         .task { await refresh() }
         .onChange(of: gpsFix) { _, _ in
             // A follow-mode location fix arrived (or moved).
@@ -73,6 +81,30 @@ struct ContentView: View {
     private func explain(_ slot: StationSlot) {
         guideHintSeen = true
         explainedSlot = slot
+    }
+
+    /// One full-window page: the content keeps its old safe-area margins,
+    /// but the page itself is as tall as the window so paging lands on it
+    /// exactly, with nothing of the neighbouring page left showing.
+    private func page(_ content: some View, in proxy: GeometryProxy) -> some View {
+        content
+            .padding(.top, windowSafeAreaInsets.top)
+            .padding(.bottom, windowSafeAreaInsets.bottom)
+            .frame(height: proxy.size.height)
+    }
+
+    /// The window's safe-area insets. Read from the window because the
+    /// obvious source doesn't work: once the `GeometryReader` above is
+    /// `.ignoresSafeArea()` — which it must be, to measure the full window
+    /// — its proxy reports the insets as zero, which put the header under
+    /// the status bar.
+    private var windowSafeAreaInsets: EdgeInsets {
+        let insets = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }?
+            .keyWindow?.safeAreaInsets ?? .zero
+        return EdgeInsets(top: insets.top, leading: insets.left,
+                          bottom: insets.bottom, trailing: insets.right)
     }
 
     private var mainPage: some View {
