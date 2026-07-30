@@ -320,6 +320,32 @@ Apple ID signed into Xcode. Set up `match`, or import a distribution p12
 and profile, before running it there. `screenshots` and `review_status`
 need no signing and work on CI as-is.
 
+## 1.1: the 7-day page reaches the top
+
+A page used to be `containerRelativeFrame(.vertical)` — the *safe area's*
+height — while the ScrollView it pages through is the height of the whole
+window. On iPhone 14 Plus that's 845 against 926: a page could never fill
+the screen, so at the bottom of the scroll the leftover 81pt had to show
+something, and what sat above page 2 was the main page's own footer,
+stranded in the status bar strip. (Nobody noticed on page 1: what's above
+*it* is blank inset.)
+
+Measured rather than guessed, via a throwaway UI test that read element
+frames before and after a swipe: the scroll travelled exactly 845pt, one
+page height, and page 2's top landed correctly at y=47 — the shortfall was
+never in the snapping, it was the page being smaller than its viewport.
+
+Pages are now the full window height and apply the safe-area insets
+themselves, so paging lands on a page exactly. Two things that bit on the
+way, both worth remembering:
+
+- `.viewAligned` snapping doesn't help. No snapping behaviour can show a
+  page that the content isn't long enough to scroll to.
+- Once the `GeometryReader` is `.ignoresSafeArea()` — which it must be, to
+  measure the whole window — its proxy reports `safeAreaInsets` as **zero**,
+  which quietly put the header under the status bar. The insets come from
+  the window instead.
+
 ## 1.1: corner labels dodge the barb; W₁ reads real METAR, not a model guess
 
 Two bugs, both from the same root cause — the annotation slots assumed a
