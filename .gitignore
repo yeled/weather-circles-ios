@@ -13,9 +13,4 @@ fastlane/test_output/
 fastlane/report.xml
 fastlane/README.md
 *.p8
-
-# fastlane comes from Homebrew here, not bundler — `fastlane init` drops a
-# Gemfile in if it's ever re-run, and committing it would only bring back
-# the "you didn't use bundle exec" warning on every invocation.
-Gemfile
-Gemfile.lock
+vendor/bundle/

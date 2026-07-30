@@ -255,17 +255,20 @@ until the guide is opened once (`guideHintSeen`).
 
 ## Screenshots and uploads (fastlane)
 
-fastlane comes from Homebrew (`brew install fastlane`) — no bundler, so
-run the lanes directly. There's no Gemfile on purpose: version pinning
-would only matter across several machines or CI, and a stray one just
-makes fastlane nag about `bundle exec` on every run.
+fastlane is pinned in the `Gemfile`, so the Mac and the CI runner agree on
+a version — run it through bundler:
 
 ```sh
-fastlane screenshots        # capture the App Store set on all three device classes
-fastlane upload_screenshots # push fastlane/screenshots to ASC
-fastlane beta               # archive + upload a TestFlight build
-fastlane review_status      # what ASC thinks is live / in review / processing
+bundle install                          # once, and after any Gemfile change
+bundle exec fastlane screenshots        # capture the set on all three device classes
+bundle exec fastlane upload_screenshots # push fastlane/screenshots to ASC
+bundle exec fastlane beta               # archive + upload a TestFlight build
+bundle exec fastlane review_status      # live / in review / processing
 ```
+
+Bundler needs a modern Ruby; macOS's own is 2.6. Homebrew's (`brew install
+ruby`, `/opt/homebrew/opt/ruby/bin` on `PATH`) is what this repo has been
+run against — the CI runner uses 3.4.
 
 Everything but `screenshots` needs an App Store Connect API key — see the
 comment at the top of the Fastfile for the three environment variables.
@@ -292,6 +295,30 @@ Notes worth keeping:
 - ASC rejects anything that isn't an exact pixel size for its slot, and it
   asks for the 6.5" set by name (1284 × 2778 — iPhone 14 Plus). The other
   two are 6.9" (1320 × 2868) and iPad 13" (2064 × 2752).
+
+### CI
+
+`.github/workflows/ci.yml` builds the app, widget and UI test target on
+every push and PR, and captures the screenshot set on `main` (or on
+demand), leaving it as a downloadable artifact. macOS runners are free
+here because the repo is public.
+
+Both workflows pin `macos-26` and select **Xcode 26.6** explicitly — the
+same toolchain used locally, and the one whose SDK the project is built
+against. The runner image carries the iPhone 17 and iPad Pro (M5)
+simulators the Snapfile asks for; an older image wouldn't.
+
+`.github/workflows/release.yml` is `workflow_dispatch` only — uploading to
+App Store Connect shouldn't be something a push can trigger by accident.
+It needs three repository secrets: `ASC_KEY_ID`, `ASC_ISSUER_ID` and
+`ASC_KEY_P8` (the .p8 file's *contents*, which the workflow writes to the
+runner's disk and nowhere else).
+
+One caveat on the `beta` lane in CI: it signs for distribution, which a
+runner can't do with the automatic signing used locally — that leans on an
+Apple ID signed into Xcode. Set up `match`, or import a distribution p12
+and profile, before running it there. `screenshots` and `review_status`
+need no signing and work on CI as-is.
 
 ## 1.1: corner labels dodge the barb; W₁ reads real METAR, not a model guess
 
