@@ -249,3 +249,36 @@ circle right now**, drawn examples, and the key.
 Entry points: tap any part of the plot, or "What am I looking at?" in the
 footer. A one-line "tap any part of the circle" nudge sits under the plot
 until the guide is opened once (`guideHintSeen`).
+
+## 1.1: corner labels dodge the barb; W₁ reads real METAR, not a model guess
+
+Two bugs, both from the same root cause — the annotation slots assumed a
+barb that only ever grew out of the circle's rim, when it actually always
+draws full-length regardless of speed:
+
+- **TT/TdTd/PPP/W₁ overlapping the barb.** ww/pp/genus already dodge a
+  barb sharing their side by swapping to the opposite vertical half, but
+  the four corner slots (fixed NW/SW/NE/SE) had no such nudge, so a wind
+  from roughly that same diagonal drew the number right through the
+  shaft. `StationPlot.clearBarb(_:)` sidesteps a corner anchor
+  perpendicular to the shaft, just far enough to clear it, whenever the
+  wind direction lines up with that corner — `temperatureAnchor`,
+  `dewPointAnchor`, `pressureAnchor` and `pastWeatherAnchor` route both
+  the drawing code and `slotRegions`' tap boxes through it, so the two
+  can't drift apart.
+- **W₁ (past weather) was reading a model guess, not an observation.**
+  `pastSignificantWeatherCode` came from Open-Meteo's hourly `weather_code`
+  over `past_hours` — the forecast model's own diagnostic, not a real
+  report. Checked against a real storm (multiple METAR stations 50–120 km
+  out reporting `TSRA`/`CB` over several hours): the model's hourly trace
+  showed *zero* precipitation for the same window at the same
+  coordinates. A longer lookback wouldn't have helped — the model simply
+  never resolved the convection, the same reason C_L already uses METAR
+  instead of a forecast field. `MetarClient.findings` now derives W₁ from
+  the nearest currently-reporting station's actual present-weather groups
+  (`TS`, `RA`, `SHRA`, `GR`, `FG`, …) over its `hours=6` history — real
+  ground truth first, the model's guess only where no station is close
+  enough to have one (`StationObservation.pastWeather`). One fetch now
+  serves both genus and past weather, so this didn't cost a second
+  request; `WeatherService.fetch`'s flag is renamed
+  `includeStationObservations` to say so.

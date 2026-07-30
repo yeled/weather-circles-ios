@@ -61,7 +61,7 @@ struct Provider: TimelineProvider {
         // timeline refreshes shouldn't spend the extra request.
         if let fetched = try? await WeatherService.fetch(
             latitude: latitude, longitude: longitude, placeName: name,
-            includeCloudGenus: false) {
+            includeStationObservations: false) {
             WeatherStore.save(fetched)
             return fetched
         }
