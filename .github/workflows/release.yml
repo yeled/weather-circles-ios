@@ -1,0 +1,48 @@
+name: Release
+
+# Manual only — this uploads to App Store Connect, which isn't something
+# a push should ever trigger by accident.
+on:
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: What to run
+        required: true
+        default: beta
+        type: choice
+        options: [beta, upload_screenshots, review_status]
+
+jobs:
+  run:
+    name: fastlane ${{ inputs.lane }}
+    runs-on: macos-26
+    env:
+      # Repository secrets. ASC_KEY_P8 is the .p8 file's contents; the key
+      # itself never lands in the repo or on disk here beyond the runner.
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+
+      - name: Write the API key
+        run: |
+          mkdir -p ~/private_keys
+          printf '%s' "$ASC_KEY_P8" > ~/private_keys/AuthKey_${ASC_KEY_ID}.p8
+          echo "ASC_KEY_PATH=$HOME/private_keys/AuthKey_${ASC_KEY_ID}.p8" >> "$GITHUB_ENV"
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+
+      # `beta` signs for distribution, which a runner can't do with the
+      # automatic signing this project uses locally — that needs an Apple
+      # ID in Xcode. Set up `match` (or import a distribution p12 +
+      # profile) before running that lane here; screenshots and
+      # review_status need no signing and work today.
+      - name: Run lane
+        run: bundle exec fastlane ${{ inputs.lane }}

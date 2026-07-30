@@ -253,6 +253,73 @@ Entry points: tap any part of the plot, or "What am I looking at?" in the
 footer. A one-line "tap any part of the circle" nudge sits under the plot
 until the guide is opened once (`guideHintSeen`).
 
+## Screenshots and uploads (fastlane)
+
+fastlane is pinned in the `Gemfile`, so the Mac and the CI runner agree on
+a version — run it through bundler:
+
+```sh
+bundle install                          # once, and after any Gemfile change
+bundle exec fastlane screenshots        # capture the set on all three device classes
+bundle exec fastlane upload_screenshots # push fastlane/screenshots to ASC
+bundle exec fastlane beta               # archive + upload a TestFlight build
+bundle exec fastlane review_status      # live / in review / processing
+```
+
+Bundler needs a modern Ruby; macOS's own is 2.6. Homebrew's (`brew install
+ruby`, `/opt/homebrew/opt/ruby/bin` on `PATH`) is what this repo has been
+run against — the CI runner uses 3.4.
+
+Everything but `screenshots` needs an App Store Connect API key — see the
+comment at the top of the Fastfile for the three environment variables.
+The `.p8` lives outside the repo and downloads exactly once.
+
+`screenshots` runs the `WeatherCirclesUITests` target, which drives the
+real UI: it taps the centre of the plot for the explainer sheet and the
+footer button for the guide, so **the app carries no screenshot-only
+code**. Earlier rounds of screenshots had to add temporary launch-argument
+hooks to `ContentView` to force a sheet open, because `simctl` can't tap.
+Only deterministic targets are used — "tap the wind barb" would be a
+lottery, since the barb points wherever the weather says, so the explainer
+shot aims at the circle, which is on every plot.
+
+Notes worth keeping:
+
+- `snapshot` matches simulators **by name against ones that already
+  exist** and errors rather than creating them, so the lane creates any
+  that are missing first.
+- `erase_simulator(true)` is deliberate: the one-time "tap any part of the
+  circle" nudge retires itself once the guide is opened — and the test
+  opens it — so without a wipe every run after the first would silently
+  lose that line from the main screenshot.
+- ASC rejects anything that isn't an exact pixel size for its slot, and it
+  asks for the 6.5" set by name (1284 × 2778 — iPhone 14 Plus). The other
+  two are 6.9" (1320 × 2868) and iPad 13" (2064 × 2752).
+
+### CI
+
+`.github/workflows/ci.yml` builds the app, widget and UI test target on
+every push and PR, and captures the screenshot set on `main` (or on
+demand), leaving it as a downloadable artifact. macOS runners are free
+here because the repo is public.
+
+Both workflows pin `macos-26` and select **Xcode 26.6** explicitly — the
+same toolchain used locally, and the one whose SDK the project is built
+against. The runner image carries the iPhone 17 and iPad Pro (M5)
+simulators the Snapfile asks for; an older image wouldn't.
+
+`.github/workflows/release.yml` is `workflow_dispatch` only — uploading to
+App Store Connect shouldn't be something a push can trigger by accident.
+It needs three repository secrets: `ASC_KEY_ID`, `ASC_ISSUER_ID` and
+`ASC_KEY_P8` (the .p8 file's *contents*, which the workflow writes to the
+runner's disk and nowhere else).
+
+One caveat on the `beta` lane in CI: it signs for distribution, which a
+runner can't do with the automatic signing used locally — that leans on an
+Apple ID signed into Xcode. Set up `match`, or import a distribution p12
+and profile, before running it there. `screenshots` and `review_status`
+need no signing and work on CI as-is.
+
 ## 1.1: corner labels dodge the barb; W₁ reads real METAR, not a model guess
 
 Two bugs, both from the same root cause — the annotation slots assumed a

@@ -1,0 +1,62 @@
+name: CI
+
+# Public repo, so macOS runner minutes are free.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build app + widget
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      # The project is objectVersion 77 and builds against the iOS 26.5
+      # SDK; the runner's default Xcode already matches, but pin it so a
+      # default bump can't silently move the goalposts.
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+
+      # build-for-testing compiles the UI test target too, without needing
+      # a booted simulator.
+      - name: Build
+        run: |
+          xcodebuild build-for-testing \
+            -project WeatherCircles.xcodeproj \
+            -scheme WeatherCircles \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            | xcbeautify --renderer github-actions
+        shell: bash
+
+  screenshots:
+    name: Screenshots
+    runs-on: macos-26
+    # Three simulators, each erased and relaunched, is slow — worth it on
+    # main and on demand, not on every push to a branch.
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_26.6.app
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true      # bundle install + cache, from Gemfile.lock
+
+      - name: Capture
+        run: bundle exec fastlane screenshots
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: app-store-screenshots
+          path: fastlane/screenshots/
+          if-no-files-found: error

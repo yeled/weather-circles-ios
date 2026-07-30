@@ -92,6 +92,7 @@ struct StationPlot: View {
         }
         .aspectRatio(1, contentMode: .fit)
         .accessibilityLabel(Text(observation.accessibilitySummary))
+        .accessibilityIdentifier("stationPlot")   // the screenshot UI test aims at this
         .overlay { tapTarget }
     }
 
