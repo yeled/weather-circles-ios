@@ -61,9 +61,11 @@ that same row of small hourly circles under the big one.)
 
 ```
 WeatherCircles/         app target (UI, CoreLocation provider)
+  StationGuide          the tap-to-explain copy, examples and views
 Shared/                 compiled into both targets:
   StationObservation    model + oktas/WMO-code derivations
-  StationPlot           the Canvas renderer (the port)
+  StationPlot           the Canvas renderer (the port) + slot hit-testing
+  StationSlot           the tappable pieces of the plot
   OpenMeteoClient       same query as the script + daily high/low
   WeatherStore          App Group cache shared with the widget
 WeatherCirclesWidget/   widget extension: lock-screen circular /
@@ -213,3 +215,37 @@ One circle per day, aggregated honestly rather than averaged:
 
 Never a flat average of everything: that washes a
 morning-fog-then-thunderstorm day into meaningless drizzle.
+
+## 1.0: the plot explains itself
+
+The station model is only readable if you already know it, so every piece
+of it is now tappable. Tap the barb and you get the wind page; tap the
+circle and you get oktas; tap `147` and you get the coded-pressure rule.
+Each page carries four things: what the slot is, **what it says on your
+circle right now**, drawn examples, and the key.
+
+- `StationSlot` (Shared) is the slot identity — the renderer hit-tests
+  it, so the geometry can't drift from what's drawn.
+- `StationPlot.slotRegions` derives a box per slot from the same anchors
+  `drawStationModelAnnotations` uses (including the barb-collision nudges,
+  which are now shared computed properties rather than inline maths).
+  Overlapping boxes resolve smallest-first, with the circle last so a barb
+  rooted on the rim wins over the disc behind it.
+- `StationPlot(onSelectSlot:)` opts a plot into the tap gesture and
+  `highlightedSlot` outlines the tapped box in ink (no accent colour —
+  nothing else in the app is coloured). The widgets and the forecast rows
+  pass neither, so they stay inert.
+- `StationPlot.Parts` masks the canvas down to one element, which is how
+  the guide's illustrations show a bare barb or a lone dew point. The
+  example observations set *only* the field being explained, so the
+  annotation slots that aren't the point stay empty rather than drawing
+  noise.
+- `StationGuide.swift` (app only) holds the copy, the examples, and the
+  views: `StationSlotDetail` for one slot, `StationGuideView` for the
+  list. The list is the way in for slots today's weather doesn't draw
+  (no CB, nothing falling) and the VoiceOver route, since a Canvas can't
+  be aimed at — the tap overlay is `accessibilityHidden`.
+
+Entry points: tap any part of the plot, or "What am I looking at?" in the
+footer. A one-line "tap any part of the circle" nudge sits under the plot
+until the guide is opened once (`guideHintSeen`).
