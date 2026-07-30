@@ -234,7 +234,10 @@ circle right now**, drawn examples, and the key.
 - `StationPlot(onSelectSlot:)` opts a plot into the tap gesture and
   `highlightedSlot` outlines the tapped box in ink (no accent colour —
   nothing else in the app is coloured). The widgets and the forecast rows
-  pass neither, so they stay inert.
+  pass neither, so they stay inert. The outline is clamped to the 260-unit
+  box: the Canvas clips to its own bounds, and the slots that hug the rim
+  (the barb, VV, a+pp) otherwise pushed their padded box past the edge and
+  lost that side's border.
 - `StationPlot.Parts` masks the canvas down to one element, which is how
   the guide's illustrations show a bare barb or a lone dew point. The
   example observations set *only* the field being explained, so the
