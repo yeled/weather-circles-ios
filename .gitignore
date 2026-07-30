@@ -14,3 +14,6 @@ fastlane/report.xml
 fastlane/README.md
 *.p8
 vendor/bundle/
+
+# fastlane env: ASC key id / issuer / path. Never committed.
+fastlane/.env
