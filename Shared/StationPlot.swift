@@ -252,10 +252,22 @@ struct StationPlot: View {
 
     /// Ink, not an accent: nothing else in the app is coloured, and a grey
     /// box reads as part of the chart rather than as chrome.
+    ///
+    /// Kept inside the 260-unit box: the Canvas clips to its own bounds,
+    /// and the slots that sit hard against the rim (the barb, VV, a+pp)
+    /// otherwise push their padded box past the edge and lose that side's
+    /// border. Clamping keeps the outline closed — every one of those
+    /// boxes still contains its glyph with room to spare, because it's
+    /// only the padding that overflows, never the mark itself.
     private func drawHighlight(_ context: inout GraphicsContext,
                                slot: StationSlot, ink: Color) {
         guard let region = slotRegions.first(where: { $0.slot == slot }) else { return }
-        let path = Path(roundedRect: region.rect.insetBy(dx: -7, dy: -7), cornerRadius: 18)
+        let inset = 2.0                   // ≥ half the stroke, so it stays whole
+        let bounds = CGRect(x: inset, y: inset,
+                            width: G.size - inset * 2, height: G.size - inset * 2)
+        let rect = region.rect.insetBy(dx: -7, dy: -7).intersection(bounds)
+        guard !rect.isNull, rect.width > 0, rect.height > 0 else { return }
+        let path = Path(roundedRect: rect, cornerRadius: 18)
         context.fill(path, with: .color(ink.opacity(0.10)))
         context.stroke(path, with: .color(ink.opacity(0.35)), lineWidth: 2.5)
     }
