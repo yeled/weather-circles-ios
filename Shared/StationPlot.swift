@@ -83,14 +83,10 @@ struct StationPlot: View {
                     .foregroundStyle(ink)
                 if fullStationModel {
                     // TT — the Met Office slot, upper-left.
-                    context.draw(label,
-                                 at: CGPoint(x: G.cx - G.r * 0.5, y: G.cy - G.r - 6),
-                                 anchor: .bottomTrailing)
+                    context.draw(label, at: temperatureAnchor, anchor: .bottomTrailing)
                 } else {
                     // The TRMNL renderer's position, upper-right.
-                    context.draw(label,
-                                 at: CGPoint(x: G.cx + G.r * 0.5, y: G.cy - G.r - 6),
-                                 anchor: .bottomLeading)
+                    context.draw(label, at: temperatureAnchor, anchor: .bottomLeading)
                 }
             }
         }
@@ -201,17 +197,18 @@ struct StationPlot: View {
                                  rect: box(G.cx - G.r - 26, presentWeatherAnchorY, 44, 44)))
         }
         if parts.contains(.temperature), showTemperature {
-            let x = fullStationModel ? G.cx - G.r * 0.5 - 23 : G.cx + G.r * 0.5 + 23
-            regions.append(.init(slot: .temperature, rect: box(x, G.cy - G.r - 21, 50, 34)))
+            let dx = fullStationModel ? -23.0 : 23.0
+            regions.append(.init(slot: .temperature,
+                                 rect: box(temperatureAnchor.x + dx, temperatureAnchor.y - 15, 50, 34)))
         }
         if fullStationModel && parts.contains(.annotations) {
             if observation.dewPointRounded != nil {
                 regions.append(.init(slot: .dewPoint,
-                                     rect: box(G.cx - G.r * 0.5 - 23, G.cy + G.r + 21, 50, 34)))
+                                     rect: box(dewPointAnchor.x - 23, dewPointAnchor.y + 15, 50, 34)))
             }
             if observation.pressureCodedPPP != nil {
                 regions.append(.init(slot: .pressure,
-                                     rect: box(G.cx + G.r * 0.5 + 26, G.cy - G.r - 21, 54, 34)))
+                                     rect: box(pressureAnchor.x + 26, pressureAnchor.y - 15, 54, 34)))
             }
             if observation.pressureChangeCodedPP != nil,
                observation.pressureTendency != nil {
@@ -220,8 +217,7 @@ struct StationPlot: View {
             }
             if observation.pastWeather != nil {
                 regions.append(.init(slot: .pastWeather,
-                                     rect: box(G.cx + (G.r + 30) * 0.7071,
-                                               G.cy + (G.r + 30) * 0.7071, 36, 36)))
+                                     rect: box(pastWeatherAnchor.x, pastWeatherAnchor.y, 36, 36)))
             }
             if observation.visibilityText != nil {
                 regions.append(.init(slot: .visibility,
@@ -415,6 +411,53 @@ struct StationPlot: View {
         return CGPoint(x: G.cx, y: G.cy + G.r + 34)
     }
 
+    /// Sidesteps a corner slot out of the barb's path. TT, TdTd, PPP and
+    /// W₁ each sit in a fixed diagonal (NW/SW/NE/SE), and the barb's shaft
+    /// is drawn full-length regardless of speed — so whenever the wind
+    /// happens to come from roughly that same diagonal, the two used to
+    /// sit right on top of each other (ww/pp/genus already dodge this by
+    /// swapping to the opposite vertical half; the corners have no such
+    /// spare slot, so instead they slide sideways, perpendicular to the
+    /// shaft, just far enough to clear it).
+    private func clearBarb(_ anchor: CGPoint) -> CGPoint {
+        guard parts.contains(.barb), observation.windSpeedKnots >= 1 else { return anchor }
+        let a = observation.windFromDegrees * .pi / 180
+        let ux = sin(a), uy = -cos(a)
+        let vx = anchor.x - G.cx, vy = anchor.y - G.cy
+        let along = vx * ux + vy * uy         // distance out along the shaft
+        guard along > 0, along < G.r + G.barbLen + 20 else { return anchor }
+        let perpX = vx - along * ux, perpY = vy - along * uy
+        let clearance = 40.0                  // half label width + half barb width, plus margin
+        let dist = (perpX * perpX + perpY * perpY).squareRoot()
+        guard dist < clearance else { return anchor }
+        let (nx, ny) = dist > 0.01 ? (perpX / dist, perpY / dist) : (-uy, ux)
+        let push = clearance - dist
+        return CGPoint(x: anchor.x + nx * push, y: anchor.y + ny * push)
+    }
+
+    /// TT's anchor: upper-left in the full model (upper-right in the
+    /// plain TRMNL circle), nudged clear of a NW-ish barb.
+    private var temperatureAnchor: CGPoint {
+        clearBarb(fullStationModel
+            ? CGPoint(x: G.cx - G.r * 0.5, y: G.cy - G.r - 6)
+            : CGPoint(x: G.cx + G.r * 0.5, y: G.cy - G.r - 6))
+    }
+
+    /// TdTd's anchor: lower-left, nudged clear of a SW-ish barb.
+    private var dewPointAnchor: CGPoint {
+        clearBarb(CGPoint(x: G.cx - G.r * 0.5, y: G.cy + G.r + 6))
+    }
+
+    /// PPP's anchor: upper-right, nudged clear of a NE-ish barb.
+    private var pressureAnchor: CGPoint {
+        clearBarb(CGPoint(x: G.cx + G.r * 0.5, y: G.cy - G.r - 6))
+    }
+
+    /// W₁'s anchor: lower-right diagonal, nudged clear of a SE-ish barb.
+    private var pastWeatherAnchor: CGPoint {
+        clearBarb(CGPoint(x: G.cx + (G.r + 30) * 0.7071, y: G.cy + (G.r + 30) * 0.7071))
+    }
+
     private func drawPresentWeather(_ context: inout GraphicsContext, ink: Color) {
         guard let key = observation.effectivePrecip else { return }
         let color = mono ? ink : key.tint
@@ -431,15 +474,11 @@ struct StationPlot: View {
 
         // TdTd — dew point, lower-left.
         if let dew = observation.dewPointRounded {
-            context.draw(label("\(dew)°", size: 26),
-                         at: CGPoint(x: G.cx - G.r * 0.5, y: G.cy + G.r + 6),
-                         anchor: .topTrailing)
+            context.draw(label("\(dew)°", size: 26), at: dewPointAnchor, anchor: .topTrailing)
         }
         // PPP — MSLP in coded tenths, upper-right.
         if let ppp = observation.pressureCodedPPP {
-            context.draw(label(ppp, size: 26),
-                         at: CGPoint(x: G.cx + G.r * 0.5, y: G.cy - G.r - 6),
-                         anchor: .bottomLeading)
+            context.draw(label(ppp, size: 26), at: pressureAnchor, anchor: .bottomLeading)
         }
         // a + pp — 3-hour tendency at 3 o'clock, nudged off an easterly
         // barb (mirror of the ww rule).
@@ -454,7 +493,7 @@ struct StationPlot: View {
         // W₁ — most significant past weather, small, lower-right.
         if let past = observation.pastWeather {
             drawGlyph(&context, key: past,
-                      x: G.cx + (G.r + 30) * 0.7071, y: G.cy + (G.r + 30) * 0.7071,
+                      x: pastWeatherAnchor.x, y: pastWeatherAnchor.y,
                       s: 18, color: ink)
         }
         // VV — visibility, just above the ww slot (shown in km — a small

@@ -69,7 +69,7 @@ extension StationSlot {
         case .tendency:
             "How the pressure has moved in the last three hours: the figure is the change in tenths of a millibar, and the little line is the shape of the barograph trace that got there."
         case .pastWeather:
-            "The most significant weather of the past six hours, drawn small and in the same alphabet as the present-weather symbol. A rain symbol here with nothing on the left means it rained earlier and has stopped."
+            "The most significant weather of the past few hours, drawn small and in the same alphabet as the present-weather symbol. A rain symbol here with nothing on the left means it rained earlier and has stopped. Read from the nearest airport's own reports when one's close enough, since a forecast model can miss a storm too local for it to see."
         case .visibility:
             "How far you can see. Real charts code this as a two-figure number; this one just prints the distance."
         case .cloudGenus:
@@ -242,6 +242,10 @@ extension StationSlot {
         case .pastWeather:
             guard let key = observation.pastWeather else {
                 return "Nothing significant in the last six hours."
+            }
+            if let station = observation.pastWeatherStationICAO {
+                return "\(Self.precipName(key)) — reported at \(station), the nearest "
+                    + "airport, in the last few hours."
             }
             return "\(Self.precipName(key)) — the small symbol at the lower-right."
         case .visibility:

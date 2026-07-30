@@ -2,22 +2,28 @@ import Foundation
 
 /// One fetch for everything the plot needs: Open-Meteo for the model
 /// fields, plus (optionally) the nearest METAR for observed low-cloud
-/// genus. The METAR leg runs concurrently and never fails the fetch —
-/// if aviationweather.gov is down, the C_L glyph simply stays off.
+/// genus and past weather. The METAR leg runs concurrently and never
+/// fails the fetch — if aviationweather.gov is down, both glyphs simply
+/// stay off (or past weather falls back to the model's own guess).
 enum WeatherService {
     static func fetch(latitude: Double, longitude: Double,
                       placeName: String? = nil,
-                      includeCloudGenus: Bool = true) async throws -> StationObservation {
-        guard includeCloudGenus else {
+                      includeStationObservations: Bool = true) async throws -> StationObservation {
+        guard includeStationObservations else {
             return try await OpenMeteoClient.observation(
                 latitude: latitude, longitude: longitude, placeName: placeName)
         }
-        async let genus = MetarClient.lowCloudGenus(latitude: latitude, longitude: longitude)
+        async let metar = MetarClient.findings(latitude: latitude, longitude: longitude)
         var observation = try await OpenMeteoClient.observation(
             latitude: latitude, longitude: longitude, placeName: placeName)
-        if let found = await genus {
+        let findings = await metar
+        if let found = findings.genus {
             observation.lowCloudGenus = found.genus
             observation.genusStationICAO = found.station
+        }
+        if let found = findings.pastWeather {
+            observation.pastWeatherMETAR = found.key
+            observation.pastWeatherStationICAO = found.station
         }
         return observation
     }

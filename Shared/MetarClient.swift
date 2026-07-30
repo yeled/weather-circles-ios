@@ -1,9 +1,13 @@
 import Foundation
 
-/// Nearest-airport METAR via aviationweather.gov — the one observational
-/// source that reports cloud *genus*, and only for convective low cloud:
-/// CB / TCU suffixes on cloud-layer groups. The API's decoded `clouds`
-/// array silently drops those suffixes, so we parse `rawOb` ourselves.
+/// Nearest-airport METAR via aviationweather.gov — the observational
+/// source for two things a forecast model can't be trusted for: cloud
+/// *genus* (CB / TCU suffixes on cloud-layer groups; the API's decoded
+/// `clouds` array silently drops those, so `rawOb` is parsed directly)
+/// and W₁, the past few hours' most significant weather. Both exist
+/// because global models routinely miss small-scale convection outright
+/// — a real storm can simply never appear in Open-Meteo's hourly
+/// `weather_code` trace, no matter how far back you look.
 enum MetarClient {
     struct Report: Decodable {
         let icaoId: String
@@ -13,32 +17,28 @@ enum MetarClient {
         let rawOb: String
     }
 
-    /// The nearest usable report's convective low-cloud genus. "Usable" =
-    /// fresh (≤ 2 h) and actually reporting sky condition. Nil means the
-    /// nearest station reports no CB/TCU — which is itself the observation,
-    /// so we don't go hunting further afield for a more dramatic answer.
-    static func lowCloudGenus(latitude: Double, longitude: Double) async
-        -> (genus: StationObservation.LowCloudGenus, station: String)? {
+    struct Findings {
+        var genus: (genus: StationObservation.LowCloudGenus, station: String)?
+        var pastWeather: (key: StationObservation.PrecipKey, station: String)?
+    }
+
+    /// One fetch — `hours=6` so past weather has a real window to scan —
+    /// serving both lookups, so a widget or app refresh spends a single
+    /// request on aviationweather.gov rather than two.
+    static func findings(latitude: Double, longitude: Double) async -> Findings {
         var components = URLComponents(string: "https://aviationweather.gov/api/data/metar")!
         components.queryItems = [
             .init(name: "bbox", value: String(format: "%.3f,%.3f,%.3f,%.3f",
                                               max(-89, latitude - 1), longitude - 1,
                                               min(89, latitude + 1), longitude + 1)),
             .init(name: "format", value: "json"),
+            .init(name: "hours", value: "6"),
         ]
         guard let url = components.url,
               let (data, response) = try? await URLSession.shared.data(from: url),
               (response as? HTTPURLResponse)?.statusCode == 200,
               let reports = try? JSONDecoder().decode([Report].self, from: data) else {
-            return nil
-        }
-
-        let now = Date().timeIntervalSince1970
-        let usable = reports.filter { report in
-            if let observed = report.obsTime, now - Double(observed) > 2 * 3600 {
-                return false
-            }
-            return skyTokens(in: report.rawOb) != nil
+            return Findings()
         }
 
         // Flat-earth squared degrees is fine for ranking stations in a ±1° box.
@@ -50,12 +50,38 @@ enum MetarClient {
             let dLon = (lon - longitude) * cos(latitude * .pi / 180)
             return dLat * dLat + dLon * dLon
         }
-
-        guard let nearest = usable.min(by: { closeness($0) < closeness($1) }),
-              let genus = genus(fromRawOb: nearest.rawOb) else {
-            return nil
+        let now = Date().timeIntervalSince1970
+        func isFresh(_ report: Report) -> Bool {
+            guard let observed = report.obsTime else { return false }
+            return now - Double(observed) <= 2 * 3600
         }
-        return (genus, nearest.icaoId)
+
+        var findings = Findings()
+
+        // Genus: nearest report that's both fresh and actually describes
+        // the sky. Nil means the nearest station sees no CB/TCU right
+        // now — which is itself the observation, so we don't hunt further
+        // afield for a more dramatic answer.
+        let skyUsable = reports.filter { isFresh($0) && skyTokens(in: $0.rawOb) != nil }
+        if let nearestSky = skyUsable.min(by: { closeness($0) < closeness($1) }),
+           let genus = genus(fromRawOb: nearestSky.rawOb) {
+            findings.genus = (genus, nearestSky.icaoId)
+        }
+
+        // Past weather: the nearest *currently reporting* station, then
+        // everything that station said across the whole window — not
+        // just its latest report, since the storm may have passed.
+        if let nearestStation = reports.filter(isFresh).min(by: { closeness($0) < closeness($1) })?.icaoId {
+            let severest = reports
+                .filter { $0.icaoId == nearestStation }
+                .compactMap { presentWeather(fromRawOb: $0.rawOb) }
+                .max { StationObservation.severity(of: $0) < StationObservation.severity(of: $1) }
+            if let severest {
+                findings.pastWeather = (severest, nearestStation)
+            }
+        }
+
+        return findings
     }
 
     /// Cloud-layer / sky tokens from the report body. Everything after
@@ -81,5 +107,40 @@ enum MetarClient {
             if token.hasSuffix("TCU") { genus = .toweringCumulus }
         }
         return genus
+    }
+
+    /// The most severe present-weather group in a METAR body, translated
+    /// to the app's precip alphabet. Trend groups (`TEMPO`/`BECMG`) and
+    /// their tail are dropped first — those are outlooks, not what the
+    /// station is reporting for itself right now — and `VC` ("in the
+    /// vicinity", i.e. seen but not overhead) tokens don't count either.
+    static func presentWeather(fromRawOb rawOb: String) -> StationObservation.PrecipKey? {
+        var body = rawOb.components(separatedBy: " RMK").first ?? rawOb
+        for trend in [" TEMPO", " BECMG"] {
+            if let range = body.range(of: trend) {
+                body = String(body[body.startIndex..<range.lowerBound])
+            }
+        }
+
+        var best: StationObservation.PrecipKey?
+        func consider(_ key: StationObservation.PrecipKey) {
+            if best == nil || StationObservation.severity(of: key) > StationObservation.severity(of: best!) {
+                best = key
+            }
+        }
+        for token in body.split(separator: " ") where !token.hasPrefix("VC") {
+            let t = String(token)
+            if t.contains("TS") { consider(.thunder) }
+            else if t.contains("GR") || t.contains("FZRA") || t.contains("FZDZ") || t.contains("PL") {
+                consider(.sleet)
+            } else if t.contains("SH"), t.contains("SN") { consider(.snowShower) }
+            else if t.contains("SN") { consider(.snow) }
+            else if t.contains("+RA") || t.contains("SHRA") { consider(.heavyRain) }
+            else if t.contains("RA") { consider(.rain) }
+            else if t.contains("DZ") { consider(.drizzle) }
+            else if t.contains("FG") { consider(.fog) }
+            else if t.contains("BR") { consider(.mist) }
+        }
+        return best
     }
 }

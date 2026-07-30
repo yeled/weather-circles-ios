@@ -27,6 +27,11 @@ struct StationObservation: Codable, Equatable {
     var pressureMSLhPa: Double?
     var pressureChange3hPa: Double?
     var pressureTendency: PressureTendency?
+    /// Fallback W₁ source: the forecast model's own hourly `weather_code`
+    /// diagnostic over `past_hours`. Kept for locations with no nearby
+    /// METAR station, but it's a model guess, not an observation — global
+    /// models routinely miss small-scale convection entirely, so
+    /// `pastWeatherMETAR` (real ground truth) wins whenever it's present.
     var pastSignificantWeatherCode: Int?
     var visibilityMeters: Double?
     /// ECMWF native ptype (GRIB 4.201: 1 rain, 3 freezing rain, 4/7 mixed,
@@ -39,6 +44,13 @@ struct StationObservation: Codable, Equatable {
     /// available from anything, so they're never faked.
     var lowCloudGenus: LowCloudGenus?
     var genusStationICAO: String?
+
+    /// W₁ from the nearest METAR's present-weather groups over the last
+    /// few hours — real ground truth, same rationale as `lowCloudGenus`:
+    /// a global forecast model's hourly diagnostic can miss a real,
+    /// localized storm outright.
+    var pastWeatherMETAR: PrecipKey?
+    var pastWeatherStationICAO: String?
 
     enum LowCloudGenus: String, Codable {
         case toweringCumulus   // WMO C_L = 2
@@ -154,10 +166,11 @@ struct StationObservation: Codable, Equatable {
         }
     }
 
-    /// W₁ — most significant past weather (set by the fetch from the last
-    /// six hourly codes).
+    /// W₁ — most significant past weather. Real METAR observation first;
+    /// the model's hourly-code guess only stands in where no station is
+    /// near enough to have one.
     var pastWeather: PrecipKey? {
-        pastSignificantWeatherCode.flatMap(Self.precipKey(forWMOCode:))
+        pastWeatherMETAR ?? pastSignificantWeatherCode.flatMap(Self.precipKey(forWMOCode:))
     }
 
     /// Severity ranking from the TRMNL plugin's README: thunder > heavy
