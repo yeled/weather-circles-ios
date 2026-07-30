@@ -255,6 +255,11 @@ until the guide is opened once (`guideHintSeen`).
 
 ## Screenshots and uploads (fastlane)
 
+fastlane comes from Homebrew (`brew install fastlane`) — no bundler, so
+run the lanes directly. There's no Gemfile on purpose: version pinning
+would only matter across several machines or CI, and a stray one just
+makes fastlane nag about `bundle exec` on every run.
+
 ```sh
 fastlane screenshots        # capture the App Store set on all three device classes
 fastlane upload_screenshots # push fastlane/screenshots to ASC
