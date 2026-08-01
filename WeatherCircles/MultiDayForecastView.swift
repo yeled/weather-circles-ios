@@ -34,6 +34,12 @@ struct MultiDayForecastView: View {
                 Spacer(minLength: 8)
             }
             Spacer(minLength: 10)
+            VStack(spacing: 0) {
+                Text("area chart")
+                Image(systemName: "chevron.compact.down")
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
         }
         .padding(.horizontal, 24)
     }

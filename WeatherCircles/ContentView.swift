@@ -12,13 +12,21 @@ struct ContentView: View {
     @State private var refreshTask: Task<Void, Never>?
     @State private var explainedSlot: StationSlot?
     @State private var showingGuide = false
+    @State private var currentPage: Page? = .main
     /// The "tap the circle" nudge earns its line of screen once.
     @AppStorage("guideHintSeen") private var guideHintSeen = false
 
+    /// The vertical pages, in order. Tracked so the area chart can wait
+    /// until it's actually on screen before spending a fetch on itself.
+    private enum Page: Int, Hashable {
+        case main, week, map
+    }
+
     var body: some View {
-        // Two vertically paged screens: swipe up from the main plot for
-        // the 7-day outlook, swipe down to come back. Pull-to-refresh
-        // keeps the classic downward drag at the top of the main page.
+        // Three vertically paged screens: swipe up from the main plot for
+        // the 7-day outlook, again for the area chart, swipe down to come
+        // back. Pull-to-refresh keeps the classic downward drag at the top
+        // of the main page.
         // A page is sized to the whole window, not to the safe area, and
         // insets itself. Sized to the safe area it was 81pt shorter than
         // the window it pages through, so at the bottom of the scroll the
@@ -29,13 +37,25 @@ struct ContentView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     page(mainPage, in: proxy)
+                        .id(Page.main)
                     page(MultiDayForecastView(days: observation?.dailyForecast ?? [],
                                               placeName: displayName)
                             .frame(maxWidth: 560)
                             .frame(maxWidth: .infinity),
                          in: proxy)
+                        .id(Page.week)
+                    page(CountryChartView(centerLatitude: chartCenter.latitude,
+                                          centerLongitude: chartCenter.longitude,
+                                          placeName: displayName,
+                                          isActive: currentPage == .map)
+                            .frame(maxWidth: 560)
+                            .frame(maxWidth: .infinity),
+                         in: proxy)
+                        .id(Page.map)
                 }
+                .scrollTargetLayout()
             }
+            .scrollPosition(id: $currentPage)
             .scrollTargetBehavior(.paging)
             .scrollIndicators(.hidden)
             .refreshable { await refresh() }
@@ -207,6 +227,21 @@ struct ContentView: View {
 
     private var displayName: String {
         selectedCity?.name ?? observation?.placeName ?? location.placeName ?? "—"
+    }
+
+    /// Where the area chart is centred: the same point the main plot came
+    /// from, so the middle circle of the lattice is the one on page one.
+    /// Falls back through the same ladder `refresh()` walks.
+    private var chartCenter: (latitude: Double, longitude: Double) {
+        if let city = selectedCity { return (city.latitude, city.longitude) }
+        if let observation { return (observation.latitude, observation.longitude) }
+        if let coordinate = location.coordinate {
+            return (coordinate.latitude, coordinate.longitude)
+        }
+        if let cached = WeatherStore.loadCoordinate() {
+            return (cached.latitude, cached.longitude)
+        }
+        return (LocationProvider.fallback.latitude, LocationProvider.fallback.longitude)
     }
 
     private var readouts: some View {
