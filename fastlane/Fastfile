@@ -74,14 +74,14 @@ platform :ios do
     app = Spaceship::ConnectAPI::App.find(identifier)
     UI.user_error!("No app in ASC for #{identifier}") if app.nil?
 
-    version = app.get_edit_app_store_version
-    if version.nil?
-      UI.message("Creating App Store version #{version_string}")
-      version = app.create_version!(version_string: version_string,
-                                    platform: Spaceship::ConnectAPI::Platform::IOS)
-    elsif version.version_string != version_string
-      UI.user_error!("ASC is already preparing #{version.version_string}, not #{version_string}")
+    existing = app.get_edit_app_store_version
+    if existing && existing.version_string != version_string
+      UI.user_error!("ASC is already preparing #{existing.version_string}, not #{version_string}")
     end
+    UI.message("Creating App Store version #{version_string}") if existing.nil?
+    app.ensure_version!(version_string, platform: Spaceship::ConnectAPI::Platform::IOS)
+    version = app.get_edit_app_store_version
+    UI.user_error!("Couldn't open an editable #{version_string} in ASC") if version.nil?
 
     version.get_app_store_version_localizations.each do |localization|
       next unless localization.locale == "en-US"
