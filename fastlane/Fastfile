@@ -185,7 +185,12 @@ platform :ios do
   # the newest installed runtime.
   private_lane :ensure_screenshot_simulators do
     wanted = ["iPhone 14 Plus", "iPhone 17 Pro Max", "iPad Pro 13-inch (M5)"]
-    existing = `xcrun simctl list devices`.scan(/^\s{4}(.+?) \(/).flatten
+    # Match up to the UDID, not up to the first " (" — half these names
+    # have brackets of their own ("iPad Pro 13-inch (M5)"), and a lazy
+    # match stops at those, so the name never compares equal and the lane
+    # creates a fresh simulator on every single run.
+    existing = `xcrun simctl list devices`
+               .scan(/^\s{4}(.+) \(\h{8}-(?:\h{4}-){3}\h{12}\)/).flatten
     runtime = `xcrun simctl list runtimes`
               .scan(/(com\.apple\.CoreSimulator\.SimRuntime\.iOS-[\d-]+)/).flatten.last
     UI.user_error!("No iOS simulator runtime installed") if runtime.nil?

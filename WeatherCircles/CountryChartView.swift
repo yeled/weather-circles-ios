@@ -99,19 +99,22 @@ struct CountryChartView: View {
                     let placed = readings.map {
                         ($0, projection.point(latitude: $0.latitude, longitude: $0.longitude))
                     }
+                    let metrics = Metrics(plate: proxy.size)
                     ForEach(placed, id: \.0.id) { reading, point in
                         StationPlot(observation: reading.observation,
                                     mono: true,       // black and white, like the rest
                                     showTemperature: false,
                                     haloColor: Color(uiColor: .systemBackground))
-                            .frame(width: Self.circleSize, height: Self.circleSize)
+                            .frame(width: metrics.circle, height: metrics.circle)
                             .accessibilityHidden(true)
                             .position(point)
                     }
-                    let names = Self.nameLayout(for: placed, in: proxy.size)
+                    let names = Self.nameLayout(for: placed, in: proxy.size,
+                                                metrics: metrics)
                     ForEach(placed, id: \.0.id) { reading, _ in
                         if let placement = names[reading.id] {
-                            label(for: reading, compact: placement.compact)
+                            label(for: reading, compact: placement.compact,
+                                  metrics: metrics)
                                 .position(placement.at)
                         }
                     }
@@ -124,16 +127,37 @@ struct CountryChartView: View {
                 }
             }
         }
-        .frame(maxWidth: 560, maxHeight: .infinity)
+        .frame(maxWidth: Self.maxPlateWidth, maxHeight: .infinity)
         .frame(maxWidth: .infinity)
     }
 
-    private static let circleSize = 52.0
+    /// The chart gets more room than the rest of the app: the main page is
+    /// capped at 560 so a single circle doesn't become a dinner plate on an
+    /// iPad, but a chart of a country wants the width — at 560 it sat in a
+    /// column down the middle with half the iPad empty either side.
+    static let maxPlateWidth = 820.0
+
+    /// How big the marks are drawn, which scales with the plate rather
+    /// than sitting fixed: a 52-point circle is right on a phone and lost
+    /// on an iPad. Sub-linear, so the circles don't swallow the country.
+    struct Metrics {
+        var circle: Double
+        var textStyle: UIFont.TextStyle
+        var font: Font
+
+        init(plate: CGSize) {
+            let width = max(plate.width, 1)
+            circle = min(78, max(46, 38 + width * 0.035))
+            let wide = width > 620
+            textStyle = wide ? .footnote : .caption2
+            font = wide ? .footnote : .caption2
+        }
+    }
 
     /// A place's name and temperature. Where you are is in full ink; the
     /// rest are secondary, so the chart still says where you're standing.
     private func label(for reading: AreaObservationsClient.Reading,
-                       compact: Bool) -> some View {
+                       compact: Bool, metrics: Metrics) -> some View {
         HStack(spacing: 3) {
             if !compact, !reading.name.isEmpty {   // scattered filler points have none
                 Text(reading.name)
@@ -143,7 +167,7 @@ struct CountryChartView: View {
                 .fontWeight(.semibold)
                 .monospacedDigit()
         }
-        .font(.caption2)
+        .font(metrics.font)
         .lineLimit(1)
         .fixedSize()
         .padding(.horizontal, 2)
@@ -170,9 +194,10 @@ struct CountryChartView: View {
     }
 
     static func nameLayout(for placed: [(AreaObservationsClient.Reading, CGPoint)],
-                           in size: CGSize) -> [Int: NamePlacement] {
-        let circles = placed.map { CGRect(x: $0.1.x - circleSize / 2, y: $0.1.y - circleSize / 2,
-                                          width: circleSize, height: circleSize) }
+                           in size: CGSize, metrics: Metrics) -> [Int: NamePlacement] {
+        let circle = metrics.circle
+        let circles = placed.map { CGRect(x: $0.1.x - circle / 2, y: $0.1.y - circle / 2,
+                                          width: circle, height: circle) }
         var taken: [CGRect] = []
         var layout: [Int: NamePlacement] = [:]
 
@@ -182,9 +207,9 @@ struct CountryChartView: View {
             // — Zealand, with four places inside 60 km — the temperature on
             // its own is a third of the width and nearly always fits.
             for compact in [false, true] {
-                let label = measure(reading, compact: compact)
+                let label = measure(reading, compact: compact, metrics: metrics)
                 guard label.width <= size.width, label.height <= size.height else { continue }
-                for candidate in slots(around: point, label: label) {
+                for candidate in slots(around: point, label: label, circle: circle) {
                     // Slid back inside the chart rather than rejected: a
                     // place near the edge (Copenhagen is 20 km from the
                     // right-hand margin) would otherwise lose its name to
@@ -214,9 +239,10 @@ struct CountryChartView: View {
 
     /// Slots to try, in preference order: under the circle, over it,
     /// beside it, then shouldered off to one side.
-    private static func slots(around point: CGPoint, label: CGSize) -> [CGPoint] {
-        let gapX = circleSize / 2 + label.width / 2 + 4
-        let gapY = circleSize / 2 + label.height / 2 + 3
+    private static func slots(around point: CGPoint, label: CGSize,
+                              circle: Double) -> [CGPoint] {
+        let gapX = circle / 2 + label.width / 2 + 4
+        let gapY = circle / 2 + label.height / 2 + 3
         return [
             CGPoint(x: point.x, y: point.y + gapY),
             CGPoint(x: point.x, y: point.y - gapY),
@@ -235,10 +261,10 @@ struct CountryChartView: View {
     /// before SwiftUI has drawn anything. Measured in the same text style
     /// the label uses, so it follows Dynamic Type too.
     private static func measure(_ reading: AreaObservationsClient.Reading,
-                                compact: Bool) -> CGSize {
+                                compact: Bool, metrics: Metrics) -> CGSize {
         let degrees = "\(reading.observation.roundedTemp)°"
         let text = (compact || reading.name.isEmpty) ? degrees : "\(reading.name) \(degrees)"
-        let font = UIFont.preferredFont(forTextStyle: .caption2)
+        let font = UIFont.preferredFont(forTextStyle: metrics.textStyle)
         let size = (text as NSString).size(withAttributes: [.font: font])
         return CGSize(width: size.width.rounded(.up) + 10,   // padding + the bold degrees
                       height: size.height.rounded(.up) + 2)

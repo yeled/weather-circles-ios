@@ -48,7 +48,7 @@ struct ContentView: View {
                                           centerLongitude: chartCenter.longitude,
                                           placeName: displayName,
                                           isActive: currentPage == .map)
-                            .frame(maxWidth: 560)
+                            .frame(maxWidth: CountryChartView.maxPlateWidth)
                             .frame(maxWidth: .infinity),
                          in: proxy)
                         .id(Page.map)
