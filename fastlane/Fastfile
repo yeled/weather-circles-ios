@@ -83,8 +83,12 @@ platform :ios do
     version = app.get_edit_app_store_version
     UI.user_error!("Couldn't open an editable #{version_string} in ASC") if version.nil?
 
-    version.get_app_store_version_localizations.each do |localization|
-      next unless localization.locale == "en-US"
+    # Every localization the version has, rather than a hardcoded "en-US":
+    # this app's primary locale in ASC is en-AU, so matching on en-US wrote
+    # the release notes precisely nowhere, and said nothing about it.
+    localizations = version.get_app_store_version_localizations
+    UI.user_error!("Version #{version_string} has no localizations to write to") if localizations.empty?
+    localizations.each do |localization|
       localization.update(attributes: { whats_new: notes })
       UI.success("What's New set for #{localization.locale}")
     end
