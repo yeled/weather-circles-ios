@@ -266,8 +266,21 @@ bundle install                          # once, and after any Gemfile change
 bundle exec fastlane screenshots        # capture the set on all three device classes
 bundle exec fastlane upload_screenshots # push fastlane/screenshots to ASC
 bundle exec fastlane beta               # archive + upload a TestFlight build
+bundle exec fastlane prepare_release    # open the App Store version, What's New, attach the build
 bundle exec fastlane review_status      # live / in review / processing
 ```
+
+`fastlane/changelog.txt` is the single source for release notes: `beta`
+sends it as TestFlight's "What to Test" and `prepare_release` writes the
+same text as the App Store's "What's New". Two copies is how they end up
+disagreeing. Bump `CURRENT_PROJECT_VERSION` before `beta` — ASC rejects a
+build number it has already seen for that version string.
+
+`prepare_release` stops one step short of submitting: it opens (or reuses)
+the editable version, writes What's New, waits for ASC to finish
+processing the build — an upload is accepted long before the build can be
+*selected* — and attaches it. Pressing submit stays a human decision, so
+there is deliberately no lane for it.
 
 Bundler needs a modern Ruby; macOS's own is 2.6. Homebrew's (`brew install
 ruby`, `/opt/homebrew/opt/ruby/bin` on `PATH`) is what this repo has been
