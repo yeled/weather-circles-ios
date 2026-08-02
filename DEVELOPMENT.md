@@ -62,11 +62,14 @@ that same row of small hourly circles under the big one.)
 ```
 WeatherCircles/         app target (UI, CoreLocation provider)
   StationGuide          the tap-to-explain copy, examples and views
+  CountryChartView      the area chart: country outline + city circles
+  CountryAtlas          bundled coastlines and city lists (Atlas.json)
 Shared/                 compiled into both targets:
   StationObservation    model + oktas/WMO-code derivations
   StationPlot           the Canvas renderer (the port) + slot hit-testing
   StationSlot           the tappable pieces of the plot
   OpenMeteoClient       same query as the script + daily high/low
+  AreaObservationsClient  many coordinates, one call — the area chart
   WeatherStore          App Group cache shared with the widget
 WeatherCirclesWidget/   widget extension: lock-screen circular /
                         rectangular / inline + home-screen small
@@ -263,8 +266,21 @@ bundle install                          # once, and after any Gemfile change
 bundle exec fastlane screenshots        # capture the set on all three device classes
 bundle exec fastlane upload_screenshots # push fastlane/screenshots to ASC
 bundle exec fastlane beta               # archive + upload a TestFlight build
+bundle exec fastlane prepare_release    # open the App Store version, What's New, attach the build
 bundle exec fastlane review_status      # live / in review / processing
 ```
+
+`fastlane/changelog.txt` is the single source for release notes: `beta`
+sends it as TestFlight's "What to Test" and `prepare_release` writes the
+same text as the App Store's "What's New". Two copies is how they end up
+disagreeing. Bump `CURRENT_PROJECT_VERSION` before `beta` — ASC rejects a
+build number it has already seen for that version string.
+
+`prepare_release` stops one step short of submitting: it opens (or reuses)
+the editable version, writes What's New, waits for ASC to finish
+processing the build — an upload is accepted long before the build can be
+*selected* — and attaches it. Pressing submit stays a human decision, so
+there is deliberately no lane for it.
 
 Bundler needs a modern Ruby; macOS's own is 2.6. Homebrew's (`brew install
 ruby`, `/opt/homebrew/opt/ruby/bin` on `PATH`) is what this repo has been
@@ -378,3 +394,54 @@ draws full-length regardless of speed:
   serves both genus and past weather, so this didn't cost a second
   request; `WeatherService.fetch`'s flag is renamed
   `includeStationObservations` to say so.
+
+## 1.1: the area chart
+
+A third vertical page, below the 7-day one: the outline of the country
+you're in, with a circle on each of its major cities. Swipe up twice.
+
+- **Points, not a lattice.** The first version tiled a regular 5 × 5 grid
+  of model points over a 200 km window of Apple's basemap. It worked, but
+  a perfect grid reads as a model dump, and a desaturated basemap fights
+  the app's one-ink look. Cities scattered over a bare coastline read as a
+  weather chart.
+- **The outline is bundled, not fetched.** `scripts/make_atlas.py` builds
+  `WeatherCircles/Atlas.json` from Natural Earth (public domain): 1:50m
+  coastlines quantised to hundredths of a degree (~1.1 km), plus the 25
+  biggest places per country. About 1 MB, no boundary service to be down,
+  and coarse on purpose — the chart wants a recognisable shape, not a
+  survey. Re-run the script to refresh it.
+- **One landmass, not one country.** `CountryAtlas.region` finds the ring
+  you're standing in, then keeps only rings within 12 % of its size around
+  it. Otherwise a chart of France is sized to hold Guyane, and a chart of
+  Britain wastes a fifth of its height on Shetland. Coastal points often
+  fall *outside* a 1:50m trace (Sydney does), so a miss falls back to the
+  nearest coastline — biased towards the biggest ring nearby, or a harbour
+  city ends up with a chart of its own harbour island.
+- **Spacing is chosen in degrees, not points.** The fetch has to be
+  settled before there's a layout to measure, so cities are picked biggest
+  first, each at least 8.5 % of the chart's width from the last.
+- **Then a coverage pass, because population hugs the coast.** Australia
+  by population alone is nine seaside cities and a blank middle — the part
+  of the country a chart most wants a reading from. A staggered lattice
+  sweeps the land, and any cell more than a quarter of the chart from
+  everything picked so far pulls in the biggest place near it, or plots
+  the bare spot if the country has nothing listed there (Alaska,
+  Greenland). For that to find anything, `make_atlas.py` keeps each
+  country's 25 biggest places **plus** its 12 loneliest — scored on
+  distance to the nearest bigger place, which is how Alice Springs
+  (Australia's 46th largest) gets into a 30-name list at all.
+- **One request.** `AreaObservationsClient` sends every coordinate in a
+  single Open-Meteo call (comma-separated `latitude`/`longitude`), asking
+  only for what the plain circle draws. No METAR leg: a dozen station
+  lookups to decorate thumbnails would be rude and slow.
+- **Names are laid out, not just offset.** They draw in a second pass over
+  the circles (an 8-okta disc is a solid black wall to a caption under
+  it), and each takes the first slot — under, over, beside, shouldered —
+  that hits no circle and no name already placed, sliding back inside the
+  chart rather than falling off the edge. Keeping the *circles* apart
+  isn't enough on a crowded country: a name is three times wider, and
+  Denmark printed "Roskilde" straight through "København". When nothing
+  fits, the name drops and the temperature stands alone. Order is where
+  you are, then cities by size, so the least important name is the one
+  that ends up compact.

@@ -43,7 +43,7 @@ platform :ios do
   # ── Builds ───────────────────────────────────────────────────────────
 
   desc "Archive and upload a build to TestFlight"
-  lane :beta do
+  lane :beta do |options|
     build_app(
       project: PROJECT,
       scheme: SCHEME,
@@ -53,8 +53,57 @@ platform :ios do
     )
     upload_to_testflight(
       api_key: asc_api_key,
+      changelog: options[:changelog] || changelog_text,
       skip_waiting_for_build_processing: true    # return once ASC accepts it
     )
+  end
+
+  desc "Prepare (but never submit) an App Store version: What's New + the build"
+  lane :prepare_release do |options|
+    version_string = options[:version] ||
+                     get_version_number(xcodeproj: PROJECT, target: SCHEME)
+    build_string = options[:build] ||
+                   get_build_number(xcodeproj: PROJECT)
+    notes = options[:changelog] || changelog_text
+    UI.user_error!("No changelog — write fastlane/changelog.txt") if notes.to_s.empty?
+
+    key = asc_api_key
+    Spaceship::ConnectAPI.auth(key_id: key[:key_id], issuer_id: key[:issuer_id],
+                               key: key[:key], in_house: false)
+    identifier = CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier)
+    app = Spaceship::ConnectAPI::App.find(identifier)
+    UI.user_error!("No app in ASC for #{identifier}") if app.nil?
+
+    existing = app.get_edit_app_store_version
+    if existing && existing.version_string != version_string
+      UI.user_error!("ASC is already preparing #{existing.version_string}, not #{version_string}")
+    end
+    UI.message("Creating App Store version #{version_string}") if existing.nil?
+    app.ensure_version!(version_string, platform: Spaceship::ConnectAPI::Platform::IOS)
+    version = app.get_edit_app_store_version
+    UI.user_error!("Couldn't open an editable #{version_string} in ASC") if version.nil?
+
+    # Every localization the version has, rather than a hardcoded "en-US":
+    # this app's primary locale in ASC is en-AU, so matching on en-US wrote
+    # the release notes precisely nowhere, and said nothing about it.
+    localizations = version.get_app_store_version_localizations
+    UI.user_error!("Version #{version_string} has no localizations to write to") if localizations.empty?
+    localizations.each do |localization|
+      localization.update(attributes: { whats_new: notes })
+      UI.success("What's New set for #{localization.locale}")
+    end
+
+    # A build can only be attached once ASC has finished processing it,
+    # which runs for a few minutes after the upload returns.
+    build = wait_for_build(app: app, version_string: version_string,
+                           build_string: build_string)
+    if build
+      version.select_build(build_id: build.id)
+      UI.success("Attached build #{build_string} to #{version_string}")
+    end
+
+    UI.important("#{version_string} is prepared and NOT submitted — " \
+                 "submit it yourself in App Store Connect.")
   end
 
   # ── Read-only ────────────────────────────────────────────────────────
@@ -89,6 +138,40 @@ platform :ios do
 
   # ── Helpers ──────────────────────────────────────────────────────────
 
+  # One changelog, used for both the TestFlight "What to Test" note and the
+  # App Store "What's New" — they describe the same build, and keeping two
+  # copies is how they end up disagreeing.
+  private_lane :changelog_text do
+    path = File.expand_path("changelog.txt", File.dirname(__FILE__))
+    File.exist?(path) ? File.read(path).strip : nil
+  end
+
+  # ASC accepts an upload long before the build is usable: it has to finish
+  # processing first, and only then can a version select it.
+  private_lane :wait_for_build do |options|
+    app = options[:app]
+    deadline = Time.now + 25 * 60
+    loop do
+      build = app.get_builds(includes: "preReleaseVersion", limit: 20).find do |candidate|
+        candidate.pre_release_version&.version == options[:version_string] &&
+          candidate.version == options[:build_string]
+      end
+      if build.nil?
+        UI.message("Build #{options[:build_string]} isn't in ASC yet…")
+      elsif build.processing_state == "VALID"
+        break build
+      else
+        UI.message("Build #{options[:build_string]} is #{build.processing_state}…")
+      end
+      if Time.now > deadline
+        UI.important("Gave up waiting for build #{options[:build_string]} to process. " \
+                     "Re-run `fastlane prepare_release` later to attach it.")
+        break nil
+      end
+      sleep(60)
+    end
+  end
+
   private_lane :asc_api_key do
     %w[ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_PATH].each do |var|
       UI.user_error!("#{var} isn't set — see the comment at the top of the Fastfile") if ENV[var].to_s.empty?
@@ -106,7 +189,12 @@ platform :ios do
   # the newest installed runtime.
   private_lane :ensure_screenshot_simulators do
     wanted = ["iPhone 14 Plus", "iPhone 17 Pro Max", "iPad Pro 13-inch (M5)"]
-    existing = `xcrun simctl list devices`.scan(/^\s{4}(.+?) \(/).flatten
+    # Match up to the UDID, not up to the first " (" — half these names
+    # have brackets of their own ("iPad Pro 13-inch (M5)"), and a lazy
+    # match stops at those, so the name never compares equal and the lane
+    # creates a fresh simulator on every single run.
+    existing = `xcrun simctl list devices`
+               .scan(/^\s{4}(.+) \(\h{8}-(?:\h{4}-){3}\h{12}\)/).flatten
     runtime = `xcrun simctl list runtimes`
               .scan(/(com\.apple\.CoreSimulator\.SimRuntime\.iOS-[\d-]+)/).flatten.last
     UI.user_error!("No iOS simulator runtime installed") if runtime.nil?

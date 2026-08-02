@@ -33,26 +33,42 @@ final class ScreenshotTests: XCTestCase {
         // 2 — the seven-day page, one paging swipe up.
         swipeToNextPage()
         snapshot("2Forecast")
+
+        // 3 — the area chart, one more swipe up. Its circles are fetched
+        // only once the page is on screen, so wait for them to land.
+        swipeToNextPage()
+        XCTAssertTrue(chartCaption.waitForExistence(timeout: 30),
+                      "The area chart should plot its places once paged to")
+        waitUntilStill(chartCaption)
+        snapshot("3Chart")
+        swipeToPreviousPage()
         swipeToPreviousPage()
 
-        // 3 — an explainer sheet. Centre of the plot = the cloud circle,
+        // 4 — an explainer sheet. Centre of the plot = the cloud circle,
         // the one slot that's on every circle regardless of weather.
         plot.tap()
         XCTAssertTrue(app.staticTexts["Cloud cover"].waitForExistence(timeout: 5),
                       "Tapping the circle should open the cloud-cover explainer")
-        snapshot("3Explainer")
+        snapshot("4Explainer")
         dismissSheet()
 
-        // 4 — the full guide, from the footer button.
+        // 5 — the full guide, from the footer button.
         app.buttons["What am I looking at?"].tap()
         XCTAssertTrue(app.staticTexts["Reading the circle"].waitForExistence(timeout: 5),
                       "The footer button should open the guide")
-        snapshot("4Guide")
+        snapshot("5Guide")
     }
 
     // ── Helpers ────────────────────────────────────────────────────────
 
     private var plot: XCUIElement { app.otherElements["stationPlot"].firstMatch }
+
+    /// The area chart's "N places, now" line — only present once the
+    /// circles have actually come back.
+    private var chartCaption: XCUIElement {
+        app.staticTexts.matching(
+            NSPredicate(format: "label ENDSWITH ' places, now'")).firstMatch
+    }
 
     /// The permission alert belongs to SpringBoard, not the app.
     private func grantLocationIfAsked() {

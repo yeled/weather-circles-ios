@@ -14,7 +14,10 @@ devices([
   "iPad Pro 13-inch (M5)"
 ])
 
-languages(["en-US"])
+# The App Store listing's primary locale is en-AU, and `deliver` matches
+# screenshot folders to locales by name — capturing into an en-US folder
+# gave it a locale the app doesn't have, which ASC then refused to create.
+languages(["en-AU"])
 
 scheme("WeatherCircles")
 
