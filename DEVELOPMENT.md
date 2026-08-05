@@ -36,8 +36,8 @@ TRMNL circle, since accessory sizes can't carry the annotations:
 | --- | --- | --- | --- |
 | TT | upper-left | air temperature | `temperature_2m` |
 | TdTd | lower-left | dew point | `dew_point_2m` |
-| PPP | upper-right | MSLP, coded tenths (1021.7 → `217`) | `pressure_msl` |
-| a + pp | right | 3-h change in tenths (`+18`) + WMO barograph-trace glyph (rising, falling, rise-then-fall, …) | hourly `pressure_msl` with `past_hours=6` |
+| PPP | upper-right | MSLP, coded tenths (1021.7 → `217`) — or the figure in full, per the pressure setting | `pressure_msl` |
+| a + pp | right | 3-h change in tenths (`+18`, or `+1.8` in full) + WMO barograph-trace glyph (rising, falling, rise-then-fall, …) | hourly `pressure_msl` with `past_hours=6` |
 | W₁ | lower-right, small | most significant past-6-h weather glyph (TRMNL severity ranking) | past hourly `weather_code` |
 | VV | left, above ww | visibility (shown in km — a small liberty vs the coded synoptic figure) | `visibility` |
 | ww | left (as before) | present weather, now **phase-corrected by ECMWF's native `precipitation_type`** when precip is falling: ptype knows freezing rain / wet snow / mixed phases the derived WMO code misses; the code keeps character (drizzle, shower, thunder) | `weather_code` + `precipitation_type` |
@@ -445,3 +445,43 @@ you're in, with a circle on each of its major cities. Swipe up twice.
   fits, the name drops and the temperature stands alone. Order is where
   you are, then cities by size, so the least important name is the one
   that ends up compact.
+
+## 1.2: pressure in full, and a Settings sheet
+
+The most-asked-for change: `216` is the real notation, and it is
+unreadable unless you already know the rule. `PressureStyle` (Shared) is
+the two ways the pressure slots can be written — `.coded`, the chart's
+shorthand and still the default, and `.hectopascals`, the figure itself —
+stored in the App Group beside the pinned city (`PressureStyleStore`) and
+read by the views through `@AppStorage`.
+
+Only the *writing* changes. The slots keep their positions, the coding
+rule is still taught, and nothing else on the circle moves — this is not
+a units conversion (a hectopascal and a millibar are the same size; the
+data was always hPa).
+
+- `StationObservation.pressureText(_:)` / `pressureChangeText(_:)` are the
+  two slots under a given style; `pressureCodedPPP` / `pressureChangeCodedPP`
+  stay as the coded forms, since the guide still quotes them.
+- `StationPlot.pressureStyle` is an explicit property, not a global read,
+  so previews and the guide's illustrations draw the style they're asked
+  for. The widgets never draw the full model, so they take the default.
+- **The plate is 260 units wide and the spelled-out figures are twice as
+  many characters**, which is the whole of the layout work. PPP drops from
+  26pt to 20 and `pressureAnchor` is now clamped by the label's width, so
+  a NE-ish barb nudge (up to 40 units) can't push `1021.6` off the edge
+  where the Canvas would clip it. pp drops from 18pt to 14: between the
+  rim and the right edge there are 58 units for the figure, the trace
+  glyph and the gap, and `+1.1` doesn't fit at 18. The tap boxes derive
+  from the same width, so hit-testing follows the setting.
+- The guide's pressure and tendency pages are style-aware — `summary`,
+  `meaning`, `howToRead` and `reading(for:)` take the style, and the copy
+  for both lives in one private `PressureStyle` extension in
+  `StationGuide.swift`. Teaching the coding rule to someone whose circle
+  isn't using it would be a lie, so each style's key ends by pointing at
+  the other one.
+- Entry points: a gear in the main page's footer (`SettingsView`), and a
+  segmented picker on the pressure and tendency guide pages — which is the
+  page you are on at the moment you decide the shorthand is unreadable.
+  Settings rows draw the same observation each way rather than describing
+  the difference in words.

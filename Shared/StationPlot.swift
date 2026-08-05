@@ -21,6 +21,10 @@ struct StationPlot: View {
     /// Off = the plain TRMNL circle (temperature upper-right), which is
     /// what the widgets use.
     var fullStationModel: Bool = false
+    /// How PPP and pp are written: the chart's coded shorthand, or the
+    /// figures in full. Only the full station model draws either, so
+    /// everything else takes the default and is unaffected.
+    var pressureStyle: PressureStyle = .default
     /// Casing drawn under the barb so it survives a solid 8-okta disc
     /// (`halo` in the Python). Pass the view's background colour.
     var haloColor: Color?
@@ -207,11 +211,12 @@ struct StationPlot: View {
                 regions.append(.init(slot: .dewPoint,
                                      rect: box(dewPointAnchor.x - 23, dewPointAnchor.y + 15, 50, 34)))
             }
-            if observation.pressureCodedPPP != nil {
+            if observation.pressureText(pressureStyle) != nil {
+                let w = pressureLabelWidth
                 regions.append(.init(slot: .pressure,
-                                     rect: box(pressureAnchor.x + 26, pressureAnchor.y - 15, 54, 34)))
+                                     rect: box(pressureAnchor.x + w / 2 - 1, pressureAnchor.y - 15, w, 34)))
             }
-            if observation.pressureChangeCodedPP != nil,
+            if observation.pressureChangeText(pressureStyle) != nil,
                observation.pressureTendency != nil {
                 regions.append(.init(slot: .tendency,
                                      rect: box(G.cx + G.r + 34, tendencyAnchorY, 60, 32)))
@@ -461,10 +466,26 @@ struct StationPlot: View {
         clearBarb(CGPoint(x: G.cx - G.r * 0.5, y: G.cy + G.r + 6))
     }
 
-    /// PPP's anchor: upper-right, nudged clear of a NE-ish barb.
+    /// PPP's anchor: upper-right, nudged clear of a NE-ish barb — then
+    /// held back from the right edge by the width of the label it carries.
+    /// A code is three characters and always fitted; `1021.6` is six, and
+    /// a barb nudge (up to 40 units) would push it off the plate, where
+    /// the Canvas would clip it.
     private var pressureAnchor: CGPoint {
-        clearBarb(CGPoint(x: G.cx + G.r * 0.5, y: G.cy - G.r - 6))
+        let anchor = clearBarb(CGPoint(x: G.cx + G.r * 0.5, y: G.cy - G.r - 6))
+        return CGPoint(x: min(anchor.x, G.size - pressureLabelWidth), y: anchor.y)
     }
+
+    /// PPP's type size and the room it needs. The spelled-out figure is
+    /// twice as many characters as the code, so it gives up a few points
+    /// rather than crowd the circle.
+    private var pressureLabelSize: Double { pressureStyle == .coded ? 26 : 20 }
+    private var pressureLabelWidth: Double { pressureStyle == .coded ? 54 : 68 }
+
+    /// pp's type size. There are 58 units between the rim and the right
+    /// edge for the figure, the trace glyph and the gap: `+11` fits at 18,
+    /// `+1.1` only at 14.
+    private var tendencyLabelSize: Double { pressureStyle == .coded ? 18 : 14 }
 
     /// W₁'s anchor: lower-right diagonal, nudged clear of a SE-ish barb.
     private var pastWeatherAnchor: CGPoint {
@@ -489,16 +510,17 @@ struct StationPlot: View {
         if let dew = observation.dewPointRounded {
             context.draw(label("\(dew)°", size: 26), at: dewPointAnchor, anchor: .topTrailing)
         }
-        // PPP — MSLP in coded tenths, upper-right.
-        if let ppp = observation.pressureCodedPPP {
-            context.draw(label(ppp, size: 26), at: pressureAnchor, anchor: .bottomLeading)
+        // PPP — MSLP upper-right, coded in tenths or written in full.
+        if let ppp = observation.pressureText(pressureStyle) {
+            context.draw(label(ppp, size: pressureLabelSize),
+                         at: pressureAnchor, anchor: .bottomLeading)
         }
         // a + pp — 3-hour tendency at 3 o'clock, nudged off an easterly
         // barb (mirror of the ww rule).
-        if let pp = observation.pressureChangeCodedPP,
+        if let pp = observation.pressureChangeText(pressureStyle),
            let tendency = observation.pressureTendency {
             let y = tendencyAnchorY
-            context.draw(label(pp, size: 18, weight: .semibold),
+            context.draw(label(pp, size: tendencyLabelSize, weight: .semibold),
                          at: CGPoint(x: G.cx + G.r + 8, y: y), anchor: .leading)
             drawTendencyGlyph(&context, tendency,
                               at: CGPoint(x: G.cx + G.r + 42, y: y), ink: ink)
@@ -681,6 +703,13 @@ private extension Color {
 
 #Preview("Full station model — rain, SW 18 kn, 6/8") {
     StationPlot(observation: .sample, fullStationModel: true,
+                haloColor: Color(uiColor: .systemBackground))
+        .padding(40)
+}
+
+#Preview("Full station model — pressure written out") {
+    StationPlot(observation: .sample, fullStationModel: true,
+                pressureStyle: .hectopascals,
                 haloColor: Color(uiColor: .systemBackground))
         .padding(40)
 }

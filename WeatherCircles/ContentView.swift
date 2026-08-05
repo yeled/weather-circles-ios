@@ -12,9 +12,13 @@ struct ContentView: View {
     @State private var refreshTask: Task<Void, Never>?
     @State private var explainedSlot: StationSlot?
     @State private var showingGuide = false
+    @State private var showingSettings = false
     @State private var currentPage: Page? = .main
     /// The "tap the circle" nudge earns its line of screen once.
     @AppStorage("guideHintSeen") private var guideHintSeen = false
+    /// Coded PPP/pp or the figures in full — see `PressureStyle`.
+    @AppStorage(PressureStyleStore.key, store: PressureStyleStore.defaults)
+    private var pressureStyle: PressureStyle = .default
 
     /// The vertical pages, in order. Tracked so the area chart can wait
     /// until it's actually on screen before spending a fetch on itself.
@@ -96,6 +100,9 @@ struct ContentView: View {
         .sheet(isPresented: $showingGuide) {
             StationGuideView(observation: observation ?? .sample)
         }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
+        }
     }
 
     private func explain(_ slot: StationSlot) {
@@ -132,6 +139,7 @@ struct ContentView: View {
             header
             StationPlot(observation: observation ?? .sample,
                         fullStationModel: true,
+                        pressureStyle: pressureStyle,
                         haloColor: Color(uiColor: .systemBackground),
                         highlightedSlot: explainedSlot,
                         onSelectSlot: explain)
@@ -158,6 +166,11 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
                 Link("Weather by Open-Meteo", destination: URL(string: "https://open-meteo.com")!)
+                Button { showingSettings = true } label: {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Settings")
             }
             .font(.footnote)
             .foregroundStyle(.tertiary)
