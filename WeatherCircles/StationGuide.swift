@@ -37,14 +37,14 @@ extension StationSlot {
         }
     }
 
-    var summary: String {
+    func summary(_ pressureStyle: PressureStyle) -> String {
         switch self {
         case .cloud:          "How much of the circle is filled in"
         case .wind:           "The line and feathers sticking out"
         case .presentWeather: "The symbol to the left of the circle"
         case .temperature:    "Upper-left of the circle"
         case .dewPoint:       "Lower-left of the circle"
-        case .pressure:       "Upper-right, in chart shorthand"
+        case .pressure:       pressureStyle.pressureSummary
         case .tendency:       "To the right, with a little trace"
         case .pastWeather:    "Small symbol, lower-right"
         case .visibility:     "Small figure, upper-left of the symbol"
@@ -52,7 +52,7 @@ extension StationSlot {
         }
     }
 
-    var meaning: String {
+    func meaning(_ pressureStyle: PressureStyle) -> String {
         switch self {
         case .cloud:
             "The circle is the whole sky, seen from above. How much of it is inked in is how much of the sky has cloud in it, measured in eighths — oktas."
@@ -65,9 +65,9 @@ extension StationSlot {
         case .dewPoint:
             "The temperature the air would have to cool to before its moisture condenses. It's how the chart carries humidity: the closer it is to the air temperature, the damper it feels, and when the two meet you get dew, mist or fog."
         case .pressure:
-            "Mean sea-level pressure, written the chart way — tenths of a millibar with the leading 9 or 10 dropped. Put back whichever one lands between 950 and 1050 mb."
+            pressureStyle.pressureMeaning
         case .tendency:
-            "How the pressure has moved in the last three hours: the figure is the change in tenths of a millibar, and the little line is the shape of the barograph trace that got there."
+            pressureStyle.tendencyMeaning
         case .pastWeather:
             "The most significant weather of the past few hours, drawn small and in the same alphabet as the present-weather symbol. A rain symbol here with nothing on the left means it rained earlier and has stopped. Read from the nearest airport's own reports when one's close enough, since a forecast model can miss a storm too local for it to see."
         case .visibility:
@@ -78,7 +78,7 @@ extension StationSlot {
     }
 
     /// The key: short lines, read as a list.
-    var howToRead: [String] {
+    func howToRead(_ pressureStyle: PressureStyle) -> [String] {
         switch self {
         case .cloud:
             ["Empty circle — sky clear",
@@ -108,13 +108,9 @@ extension StationSlot {
              "5–10° below — comfortable",
              "More than 10° below — dry air"]
         case .pressure:
-            ["216 → 1021.6 mb",
-             "987 → 998.7 mb",
-             "Around 1013 mb is average; below 1000 is a proper low"]
+            pressureStyle.pressureKey
         case .tendency:
-            ["The figure is tenths of a millibar: +18 means up 1.8 mb",
-             "Falling usually means weather on the way; rising means it's clearing",
-             "The trace shape matters: a rise-then-fall is a front going through"]
+            pressureStyle.tendencyKey
         case .visibility:
             ["Under 1 km — fog",
              "1–4 km — mist or murk",
@@ -160,14 +156,14 @@ extension StationSlot {
              .init("Air 20°, dew point 4° — dry", .guide(temp: 20, dew: 4),
                    parts: [.oktas, .temperature, .annotations])]
         case .pressure:
-            [.init("1021.6 mb", .guide(pressure: 1021.6), parts: [.oktas, .annotations]),
-             .init("998.7 mb", .guide(pressure: 998.7), parts: [.oktas, .annotations])]
+            [.init("1021.6 hPa", .guide(pressure: 1021.6), parts: [.oktas, .annotations]),
+             .init("998.7 hPa", .guide(pressure: 998.7), parts: [.oktas, .annotations])]
         case .tendency:
-            [.init("Up 1.8 mb, still rising", .guide(change: 1.8, tendency: .rising),
+            [.init("Up 1.8 hPa, still rising", .guide(change: 1.8, tendency: .rising),
                    parts: [.oktas, .annotations]),
-             .init("Down 2.4 mb, still falling", .guide(change: -2.4, tendency: .falling),
+             .init("Down 2.4 hPa, still falling", .guide(change: -2.4, tendency: .falling),
                    parts: [.oktas, .annotations]),
-             .init("Up 0.9 mb, rise then fall", .guide(change: 0.9, tendency: .riseThenFall),
+             .init("Up 0.9 hPa, rise then fall", .guide(change: 0.9, tendency: .riseThenFall),
                    parts: [.oktas, .annotations])]
         case .pastWeather:
             [.init("Rain in the last six hours", .guide(past: 61), parts: [.oktas, .annotations]),
@@ -199,7 +195,8 @@ extension StationSlot {
 
     /// What this slot says on the circle in front of you — including the
     /// honest "nothing here today" cases.
-    func reading(for observation: StationObservation) -> String {
+    func reading(for observation: StationObservation,
+                 pressureStyle: PressureStyle) -> String {
         switch self {
         case .cloud:
             return "\(observation.oktas)⁄8 — \(Self.cloudTerm(observation.oktas))"
@@ -227,18 +224,29 @@ extension StationSlot {
                 + "\(Self.dewTerm(spread))."
         case .pressure:
             guard let coded = observation.pressureCodedPPP,
-                  let mb = observation.pressureMSLhPa else {
+                  let hPa = observation.pressureMSLhPa else {
                 return "Not available for this location."
             }
-            return String(format: "%@ — %.1f mb", coded, mb)
+            // Coded: the drawn figure, then what it works out to. Spelled
+            // out, the drawn figure *is* what it works out to.
+            switch pressureStyle {
+            case .coded:        return String(format: "%@ — %.1f hPa", coded, hPa)
+            case .hectopascals: return String(format: "%.1f hPa", hPa)
+            }
         case .tendency:
             guard let pp = observation.pressureChangeCodedPP,
                   let tendency = observation.pressureTendency,
                   let change = observation.pressureChange3hPa else {
                 return "Not available for this location."
             }
-            return String(format: "%@ — %+.1f mb over three hours, %@.",
-                          pp, change, Self.tendencyTerm(tendency))
+            switch pressureStyle {
+            case .coded:
+                return String(format: "%@ — %+.1f hPa over three hours, %@.",
+                              pp, change, Self.tendencyTerm(tendency))
+            case .hectopascals:
+                return String(format: "%+.1f hPa over three hours, %@.",
+                              change, Self.tendencyTerm(tendency))
+            }
         case .pastWeather:
             guard let key = observation.pastWeather else {
                 return "Nothing significant in the last six hours."
@@ -340,6 +348,63 @@ extension StationSlot {
     }
 }
 
+/// The two pressure pages read differently depending on how the slots are
+/// written — the guide's job is to explain what's actually on the circle,
+/// so the coding rule is only taught when the circle is using it.
+private extension PressureStyle {
+    var pressureSummary: String {
+        switch self {
+        case .coded:        "Upper-right, in chart shorthand"
+        case .hectopascals: "Upper-right of the circle"
+        }
+    }
+
+    var pressureMeaning: String {
+        switch self {
+        case .coded:
+            "Mean sea-level pressure, written the chart way — tenths of a millibar with the leading 9 or 10 dropped. Put back whichever one lands between 950 and 1050 mb."
+        case .hectopascals:
+            "Mean sea-level pressure, printed in full. A chart would code it — tenths of a millibar, leading 9 or 10 dropped — but this one prints the figure. Hectopascals and millibars are the same size, so 1021.6 hPa is 1021.6 mb."
+        }
+    }
+
+    var tendencyMeaning: String {
+        switch self {
+        case .coded:
+            "How the pressure has moved in the last three hours: the figure is the change in tenths of a millibar, and the little line is the shape of the barograph trace that got there."
+        case .hectopascals:
+            "How the pressure has moved in the last three hours: the figure is the change in hectopascals, and the little line is the shape of the barograph trace that got there."
+        }
+    }
+
+    var pressureKey: [String] {
+        switch self {
+        case .coded:
+            ["216 → 1021.6 hPa",
+             "987 → 998.7 hPa",
+             "Around 1013 hPa is average; below 1000 is a proper low",
+             "Settings can print the figure in full instead"]
+        case .hectopascals:
+            ["Around 1013 hPa is average",
+             "Below 1000 is a proper low; above 1025 a settled high",
+             "A chart writes this coded — 1021.6 as 216. Settings has that too"]
+        }
+    }
+
+    var tendencyKey: [String] {
+        switch self {
+        case .coded:
+            ["The figure is tenths of a millibar: +18 means up 1.8 hPa",
+             "Falling usually means weather on the way; rising means it's clearing",
+             "The trace shape matters: a rise-then-fall is a front going through"]
+        case .hectopascals:
+            ["+1.8 means the pressure is 1.8 hPa higher than three hours ago",
+             "Falling usually means weather on the way; rising means it's clearing",
+             "The trace shape matters: a rise-then-fall is a front going through"]
+        }
+    }
+}
+
 /// One drawn illustration: a station circle showing only the parts that
 /// make the point.
 struct StationGuideExample: Identifiable {
@@ -383,6 +448,8 @@ private extension StationObservation {
 struct StationSlotDetail: View {
     var slot: StationSlot
     var observation: StationObservation
+    @AppStorage(PressureStyleStore.key, store: PressureStyleStore.defaults)
+    private var pressureStyle: PressureStyle = .default
 
     var body: some View {
         ScrollView {
@@ -394,21 +461,37 @@ struct StationSlotDetail: View {
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
                 }
-                Text(slot.meaning)
+                Text(slot.meaning(pressureStyle))
 
                 section("On your circle right now") {
-                    Text(slot.reading(for: observation))
+                    Text(slot.reading(for: observation, pressureStyle: pressureStyle))
                         .font(.callout)
                 }
 
-                section(slot.examples.count > 1 ? "Examples" : "Example") {
-                    StationGuideExampleGrid(examples: slot.examples)
+                // The two slots the setting governs carry it here as well
+                // as in Settings: this is the page you're on when you find
+                // the shorthand unreadable.
+                if slot == .pressure || slot == .tendency {
+                    section("How it's written") {
+                        Picker("How it's written", selection: $pressureStyle) {
+                            ForEach(PressureStyle.allCases) { style in
+                                Text(style.title).tag(style)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                    }
                 }
 
-                if !slot.howToRead.isEmpty {
+                section(slot.examples.count > 1 ? "Examples" : "Example") {
+                    StationGuideExampleGrid(examples: slot.examples,
+                                            pressureStyle: pressureStyle)
+                }
+
+                if !slot.howToRead(pressureStyle).isEmpty {
                     section("How to read it") {
                         VStack(alignment: .leading, spacing: 7) {
-                            ForEach(slot.howToRead, id: \.self) { line in
+                            ForEach(slot.howToRead(pressureStyle), id: \.self) { line in
                                 HStack(alignment: .top, spacing: 8) {
                                     Text("·").foregroundStyle(.tertiary)
                                     Text(line)
@@ -439,6 +522,7 @@ struct StationSlotDetail: View {
 
 private struct StationGuideExampleGrid: View {
     var examples: [StationGuideExample]
+    var pressureStyle: PressureStyle
 
     private var tile: Double { examples.count > 4 ? 76 : 104 }
 
@@ -450,6 +534,7 @@ private struct StationGuideExampleGrid: View {
                     StationPlot(observation: example.observation,
                                 showTemperature: example.parts.contains(.temperature),
                                 fullStationModel: true,
+                                pressureStyle: pressureStyle,
                                 parts: example.parts)
                         .frame(width: tile, height: tile)
                     Text(example.caption)
@@ -469,6 +554,8 @@ private struct StationGuideExampleGrid: View {
 /// doesn't happen to draw, and the VoiceOver-friendly route.
 struct StationGuideView: View {
     var observation: StationObservation
+    @AppStorage(PressureStyleStore.key, store: PressureStyleStore.defaults)
+    private var pressureStyle: PressureStyle = .default
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -489,12 +576,13 @@ struct StationGuideView: View {
                                 StationPlot(observation: example.observation,
                                             showTemperature: example.parts.contains(.temperature),
                                             fullStationModel: true,
+                                            pressureStyle: pressureStyle,
                                             parts: example.parts)
                                     .frame(width: 54, height: 54)
                                     .accessibilityHidden(true)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(slot.title)
-                                    Text(slot.summary)
+                                    Text(slot.summary(pressureStyle))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }

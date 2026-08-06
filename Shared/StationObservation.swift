@@ -235,6 +235,25 @@ struct StationObservation: Codable, Equatable {
         return String(format: "%+d", Int((change * 10).rounded()))
     }
 
+    /// What the PPP slot says under a given writing style: the chart's
+    /// code, or the pressure itself.
+    func pressureText(_ style: PressureStyle) -> String? {
+        guard let pressure = pressureMSLhPa else { return nil }
+        switch style {
+        case .coded:        return pressureCodedPPP
+        case .hectopascals: return String(format: "%.1f", pressure)
+        }
+    }
+
+    /// The same for the pp figure beside the barograph trace.
+    func pressureChangeText(_ style: PressureStyle) -> String? {
+        guard let change = pressureChange3hPa else { return nil }
+        switch style {
+        case .coded:        return pressureChangeCodedPP
+        case .hectopascals: return String(format: "%+.1f", change)
+        }
+    }
+
     var visibilityText: String? {
         guard let v = visibilityMeters else { return nil }
         if v < 1000 { return "\(Int((v / 100).rounded()) * 100) m" }
