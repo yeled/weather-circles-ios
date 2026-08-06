@@ -267,6 +267,7 @@ bundle exec fastlane screenshots        # capture the set on all three device cl
 bundle exec fastlane upload_screenshots # push fastlane/screenshots to ASC
 bundle exec fastlane beta               # archive + upload a TestFlight build
 bundle exec fastlane prepare_release    # open the App Store version, What's New, attach the build
+bundle exec fastlane submit_release     # send the prepared version to Apple's review queue
 bundle exec fastlane review_status      # live / in review / processing
 ```
 
@@ -279,8 +280,15 @@ build number it has already seen for that version string.
 `prepare_release` stops one step short of submitting: it opens (or reuses)
 the editable version, writes What's New, waits for ASC to finish
 processing the build — an upload is accepted long before the build can be
-*selected* — and attaches it. Pressing submit stays a human decision, so
-there is deliberately no lane for it.
+*selected* — and attaches it.
+
+Submitting stays a separate, deliberate step, and `submit_release` is it.
+Starting a review is the one thing here you can't undo quietly, so the
+lane checks every precondition before it creates anything: that ASC is
+preparing the version you think it is, that a build is actually attached,
+and that nothing is already with Apple. It reuses an open submission left
+by a failed run rather than making a second one — ASC allows only one at
+a time — and won't add the same version twice.
 
 Bundler needs a modern Ruby; macOS's own is 2.6. Homebrew's (`brew install
 ruby`, `/opt/homebrew/opt/ruby/bin` on `PATH`) is what this repo has been
