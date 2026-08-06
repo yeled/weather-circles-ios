@@ -1,5 +1,5 @@
-New in 1.1
+New in 1.2
 
-• Area chart. Swipe up twice for the outline of the country you're in, with a station circle on each of its major cities — cloud, wind and present weather at a glance, right across the country.
+• Pressure in plain figures. A surface chart writes 1021.6 hPa as "216" — the real notation, and unreadable unless you already know the rule. Settings can now print the pressure and its three-hour change in full instead.
 
-• The seven-day page now reaches the top of the screen instead of stopping short of it.
+• A Settings sheet, reached from the gear in the footer.
