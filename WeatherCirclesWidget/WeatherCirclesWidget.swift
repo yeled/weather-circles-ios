@@ -137,6 +137,53 @@ struct WeatherCirclesWidgetEntryView: View {
     }
 }
 
+/// The lock screen strip is four circular slots wide and the rectangular
+/// family spans two of them — the widest a single widget gets — so the
+/// forecast draws its own four "spaces": the next four 2-hour slots as a
+/// row of mini circles, hour above, temperature below. Add it twice and
+/// the whole strip is circles.
+struct ForecastCirclesEntryView: View {
+    var entry: WeatherEntry
+
+    var body: some View {
+        content
+            .containerBackground(for: .widget) { Color.clear }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let slots = entry.observation.forecastSlots, !slots.isEmpty {
+            HStack(spacing: 4) {
+                ForEach(Array(slots.prefix(4).enumerated()), id: \.offset) { _, slot in
+                    VStack(spacing: 0) {
+                        Text(slot.hourLabel)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        StationPlot(observation: slot.asObservation(),
+                                    ink: .primary, mono: true,
+                                    showTemperature: false)
+                        Text("\(Int(slot.temperatureC.rounded()))°")
+                            .font(.caption2.weight(.semibold))
+                            .monospacedDigit()
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        } else {
+            // A cached observation from before forecast slots existed —
+            // fall back to now, rather than an empty rectangle, until the
+            // next timeline refresh brings slots.
+            HStack(spacing: 6) {
+                StationPlot(observation: entry.observation, ink: .primary,
+                            mono: true, showTemperature: false)
+                Text("\(entry.observation.roundedTemp)°")
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
+                Spacer(minLength: 0)
+            }
+        }
+    }
+}
+
 struct WeatherCirclesWidget: Widget {
     let kind = "WeatherCirclesWidget"
 
@@ -150,10 +197,24 @@ struct WeatherCirclesWidget: Widget {
     }
 }
 
+struct WeatherCirclesForecastWidget: Widget {
+    let kind = "WeatherCirclesForecastWidget"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: Provider()) { entry in
+            ForecastCirclesEntryView(entry: entry)
+        }
+        .configurationDisplayName("Forecast Circles")
+        .description("The next eight hours as four mini circles — cloud oktas, wind barb and weather for every two-hour slot.")
+        .supportedFamilies([.accessoryRectangular])
+    }
+}
+
 @main
 struct WeatherCirclesWidgetBundle: WidgetBundle {
     var body: some Widget {
         WeatherCirclesWidget()
+        WeatherCirclesForecastWidget()
     }
 }
 
@@ -171,6 +232,12 @@ struct WeatherCirclesWidgetBundle: WidgetBundle {
 
 #Preview(as: .systemSmall) {
     WeatherCirclesWidget()
+} timeline: {
+    WeatherEntry(date: .now, observation: .sample)
+}
+
+#Preview(as: .accessoryRectangular) {
+    WeatherCirclesForecastWidget()
 } timeline: {
     WeatherEntry(date: .now, observation: .sample)
 }

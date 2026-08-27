@@ -310,5 +310,26 @@ struct StationObservation: Codable, Equatable {
         dewPointC: 11, pressureMSLhPa: 1004.8,
         pressureChange3hPa: -1.2, pressureTendency: .falling,
         pastSignificantWeatherCode: 61, visibilityMeters: 8000,
-        precipitationTypeCode: nil, precipitationMM: 0.4)
+        precipitationTypeCode: nil, precipitationMM: 0.4,
+        // A frontal passage, so placeholders and the widget gallery show
+        // the forecast row doing something: rain heaviest mid-afternoon,
+        // showers behind the front, then the wind veers and it clears.
+        forecastSlots: [
+            .init(localHour: 14, temperatureC: 14, weatherCode: 61,
+                  cloudCoverPercent: 75, windSpeedKnots: 18, windFromDegrees: 230),
+            .init(localHour: 16, temperatureC: 15, weatherCode: 63,
+                  cloudCoverPercent: 88, windSpeedKnots: 20, windFromDegrees: 235),
+            .init(localHour: 18, temperatureC: 13, weatherCode: 80,
+                  cloudCoverPercent: 62, windSpeedKnots: 16, windFromDegrees: 250),
+            .init(localHour: 20, temperatureC: 11, weatherCode: 2,
+                  cloudCoverPercent: 38, windSpeedKnots: 12, windFromDegrees: 260),
+            .init(localHour: 22, temperatureC: 10, weatherCode: 1,
+                  cloudCoverPercent: 25, windSpeedKnots: 9, windFromDegrees: 265),
+            .init(localHour: 0, temperatureC: 9, weatherCode: 0,
+                  cloudCoverPercent: 12, windSpeedKnots: 7, windFromDegrees: 270),
+            .init(localHour: 2, temperatureC: 9, weatherCode: 0,
+                  cloudCoverPercent: 5, windSpeedKnots: 6, windFromDegrees: 275),
+            .init(localHour: 4, temperatureC: 8, weatherCode: 3,
+                  cloudCoverPercent: 90, windSpeedKnots: 8, windFromDegrees: 280),
+        ])
 }
