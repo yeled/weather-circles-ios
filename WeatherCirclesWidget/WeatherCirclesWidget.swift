@@ -10,31 +10,120 @@ struct WeatherEntry: TimelineEntry {
     var span: ForecastSpan = .hours
 }
 
-struct Provider: TimelineProvider {
+/// A recent location from the app's picker, offered in the widget's
+/// configuration sheet — plus the Automatic sentinel, which follows the
+/// app exactly as an unconfigured widget always has. The subtitle folds
+/// admin1/country together because the entity only ever fetches by
+/// coordinate; it never needs them apart again.
+struct CityEntity: AppEntity {
+    static let typeDisplayRepresentation: TypeDisplayRepresentation = "Location"
+    static let defaultQuery = CityQuery()
+
+    let id: Int
+    let name: String
+    let subtitle: String
+    let latitude: Double
+    let longitude: Double
+
+    init(city: City) {
+        id = city.id
+        name = city.name
+        subtitle = city.subtitle
+        latitude = city.latitude
+        longitude = city.longitude
+    }
+
+    private init(id: Int, name: String, subtitle: String) {
+        self.id = id
+        self.name = name
+        self.subtitle = subtitle
+        latitude = 0
+        longitude = 0
+    }
+
+    /// id 0 — safely outside the geocoder's GeoNames id space.
+    static let automatic = CityEntity(id: 0, name: "Automatic",
+                                      subtitle: "Follow the app")
+
+    /// nil for Automatic; a coordinate-and-name City for anything real.
+    var pinnedCity: City? {
+        guard id != 0 else { return nil }
+        return City(id: id, name: name, admin1: nil, country: nil,
+                    latitude: latitude, longitude: longitude)
+    }
+
+    var displayRepresentation: DisplayRepresentation {
+        subtitle.isEmpty
+            ? DisplayRepresentation(title: "\(name)")
+            : DisplayRepresentation(title: "\(name)", subtitle: "\(subtitle)")
+    }
+}
+
+struct CityQuery: EntityQuery {
+    func entities(for identifiers: [Int]) async throws -> [CityEntity] {
+        identifiers.compactMap { id in
+            id == 0 ? .automatic
+                    : CityStore.recents.first { $0.id == id }.map(CityEntity.init(city:))
+        }
+    }
+
+    func suggestedEntities() async throws -> [CityEntity] {
+        [.automatic] + CityStore.recents.map(CityEntity.init(city:))
+    }
+
+    func defaultResult() async -> CityEntity? { .automatic }
+}
+
+struct CircleLocationIntent: WidgetConfigurationIntent {
+    static let title: LocalizedStringResource = "Weather Circle"
+    static let description = IntentDescription(
+        "Pin the circle to one of your recent locations, or let it follow the app.")
+
+    @Parameter(title: "Location")
+    var location: CityEntity
+}
+
+struct Provider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> WeatherEntry {
         WeatherEntry(date: Date(), observation: .sample)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (WeatherEntry) -> Void) {
-        completion(WeatherEntry(date: Date(),
-                                observation: WeatherStore.loadObservation() ?? .sample))
+    func snapshot(for configuration: CircleLocationIntent,
+                  in context: Context) async -> WeatherEntry {
+        let cached = configuration.location.pinnedCity
+            .flatMap { WeatherStore.loadObservation(cityID: $0.id) }
+            ?? WeatherStore.loadObservation()
+        return WeatherEntry(date: Date(), observation: cached ?? .sample)
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<WeatherEntry>) -> Void) {
-        Task {
-            let observation = await currentObservation()
-            let entry = WeatherEntry(date: Date(), observation: observation)
-            let next = Date().addingTimeInterval(30 * 60)
-            completion(Timeline(entries: [entry], policy: .after(next)))
-        }
+    func timeline(for configuration: CircleLocationIntent,
+                  in context: Context) async -> Timeline<WeatherEntry> {
+        let observation = await currentObservation(
+            pinnedTo: configuration.location.pinnedCity)
+        let entry = WeatherEntry(date: Date(), observation: observation)
+        return Timeline(entries: [entry],
+                        policy: .after(Date().addingTimeInterval(30 * 60)))
     }
 }
 
-/// A pinned city wins; else the widget's own location fix; else the
-/// app's last coordinate; else the original script's London default.
-/// Network errors fall back to the cached observation so the circle
-/// never goes blank. Shared by both widgets' providers.
-private func currentObservation() async -> StationObservation {
+/// A city pinned on the widget itself wins outright, and caches in its own
+/// per-city slot so four differently-pinned circles never fight over the
+/// app-wide cache. Otherwise: the app's pinned city; else the widget's own
+/// location fix; else the app's last coordinate; else the original
+/// script's London default. Network errors fall back to the cached
+/// observation so the circle never goes blank. Shared by both widgets'
+/// providers.
+private func currentObservation(pinnedTo pinned: City? = nil) async -> StationObservation {
+    if let pinned {
+        if let fetched = try? await WeatherService.fetch(
+            latitude: pinned.latitude, longitude: pinned.longitude,
+            placeName: pinned.name, includeStationObservations: false) {
+            WeatherStore.saveCityObservation(fetched, cityID: pinned.id)
+            return fetched
+        }
+        return WeatherStore.loadObservation(cityID: pinned.id) ?? .sample
+    }
+
     var latitude: Double
     var longitude: Double
     var name: String?
@@ -280,11 +369,12 @@ struct WeatherCirclesWidget: Widget {
     let kind = "WeatherCirclesWidget"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: Provider()) { entry in
+        AppIntentConfiguration(kind: kind, intent: CircleLocationIntent.self,
+                               provider: Provider()) { entry in
             WeatherCirclesWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Weather Circle")
-        .description("Station-model circle for current conditions — cloud oktas, wind barb, present weather — plus today's high/low.")
+        .description("Station-model circle for current conditions — cloud oktas, wind barb, present weather — plus today's high/low. Pin it to a recent location, or let it follow the app.")
         .supportedFamilies([.systemSmall, .accessoryCircular, .accessoryRectangular, .accessoryInline])
     }
 }

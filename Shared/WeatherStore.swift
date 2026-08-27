@@ -19,8 +19,15 @@ enum WeatherStore {
         guard let data = try? JSONEncoder().encode(observation) else { return }
         defaults.set(data, forKey: observationKey)
         if let cityID {
-            defaults.set(data, forKey: "observation-city-\(cityID)")
+            defaults.set(data, forKey: cityKey(cityID))
         }
+    }
+
+    /// The per-city slot alone — a city-pinned widget's fetch mustn't
+    /// become the app-wide "last observation".
+    static func saveCityObservation(_ observation: StationObservation, cityID: Int) {
+        guard let data = try? JSONEncoder().encode(observation) else { return }
+        defaults.set(data, forKey: cityKey(cityID))
     }
 
     static func loadObservation() -> StationObservation? {
@@ -31,9 +38,11 @@ enum WeatherStore {
     /// Last observation fetched for a pinned city — shown instantly when
     /// the city is re-chosen, while the live fetch replaces it.
     static func loadObservation(cityID: Int) -> StationObservation? {
-        guard let data = defaults.data(forKey: "observation-city-\(cityID)") else { return nil }
+        guard let data = defaults.data(forKey: cityKey(cityID)) else { return nil }
         return try? JSONDecoder().decode(StationObservation.self, from: data)
     }
+
+    private static func cityKey(_ id: Int) -> String { "observation-city-\(id)" }
 
     static func saveCoordinate(latitude: Double, longitude: Double) {
         defaults.set([latitude, longitude], forKey: coordinateKey)
