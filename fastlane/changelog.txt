@@ -1,3 +1,3 @@
 New in 1.3
 
-• Forecast Circles, a second lock-screen widget: the next eight hours as four mini station circles — cloud oktas, wind barb and weather for every two-hour slot, hour above, temperature below. It takes the rectangular slot (the widest the lock screen allows a single widget); add it twice and the whole strip is circles.
+• Forecast Circles, a second lock-screen widget: four mini station circles — cloud oktas, wind barb and weather — showing either the next eight hours in two-hour slots or the next four days, your choice when you add or edit the widget. It takes the rectangular slot (the widest the lock screen allows a single widget); add it twice, one of each, and the whole strip is circles.

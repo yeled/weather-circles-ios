@@ -331,5 +331,21 @@ struct StationObservation: Codable, Equatable {
                   cloudCoverPercent: 5, windSpeedKnots: 6, windFromDegrees: 275),
             .init(localHour: 4, temperatureC: 8, weatherCode: 3,
                   cloudCoverPercent: 90, windSpeedKnots: 8, windFromDegrees: 280),
+        ],
+        // The days after the front: showery, then ridge, then the next
+        // system. Fixed dates — samples aren't live data.
+        dailyForecast: [
+            .init(dateISO: "2026-08-27", highC: 17, lowC: 9, weatherCode: 61,
+                  cloudCoverMeanPercent: 75, windMaxKnots: 20,
+                  windDominantDegrees: 230, precipitationSumMM: 6.2),
+            .init(dateISO: "2026-08-28", highC: 15, lowC: 8, weatherCode: 80,
+                  cloudCoverMeanPercent: 50, windMaxKnots: 16,
+                  windDominantDegrees: 260, precipitationSumMM: 2.1),
+            .init(dateISO: "2026-08-29", highC: 18, lowC: 7, weatherCode: 1,
+                  cloudCoverMeanPercent: 20, windMaxKnots: 9,
+                  windDominantDegrees: 280, precipitationSumMM: 0),
+            .init(dateISO: "2026-08-30", highC: 16, lowC: 10, weatherCode: 3,
+                  cloudCoverMeanPercent: 90, windMaxKnots: 12,
+                  windDominantDegrees: 180, precipitationSumMM: 0),
         ])
 }
