@@ -52,7 +52,8 @@ extension StationSlot {
         }
     }
 
-    func meaning(_ pressureStyle: PressureStyle) -> String {
+    func meaning(_ pressureStyle: PressureStyle,
+                 _ temperatureUnit: TemperatureUnit) -> String {
         switch self {
         case .cloud:
             "The circle is the whole sky, seen from above. How much of it is inked in is how much of the sky has cloud in it, measured in eighths — oktas."
@@ -61,7 +62,9 @@ extension StationSlot {
         case .presentWeather:
             "The weather happening right now, in the symbol alphabet used on surface charts. No symbol means nothing is falling."
         case .temperature:
-            "Air temperature in °C, in the slot a real chart reserves for it: upper-left of the circle."
+            temperatureUnit == .celsius
+                ? "Air temperature in °C, in the slot a real chart reserves for it: upper-left of the circle."
+                : "Air temperature in °F, in the slot a real chart reserves for it: upper-left of the circle. A real chart writes °C — Settings can put it back."
         case .dewPoint:
             "The temperature the air would have to cool to before its moisture condenses. It's how the chart carries humidity: the closer it is to the air temperature, the damper it feels, and when the two meet you get dew, mist or fog."
         case .pressure:
@@ -78,7 +81,8 @@ extension StationSlot {
     }
 
     /// The key: short lines, read as a list.
-    func howToRead(_ pressureStyle: PressureStyle) -> [String] {
+    func howToRead(_ pressureStyle: PressureStyle,
+                   _ temperatureUnit: TemperatureUnit) -> [String] {
         switch self {
         case .cloud:
             ["Empty circle — sky clear",
@@ -103,10 +107,17 @@ extension StationSlot {
              "Two lines — mist; three lines — fog",
              "The colours are only a tint; the shape carries the meaning"]
         case .dewPoint:
-            ["Within 2° of the air temperature — saturated: mist, fog or drizzle",
-             "2–5° below — muggy",
-             "5–10° below — comfortable",
-             "More than 10° below — dry air"]
+            // The spreads are °C thresholds; in °F the same air is nearly
+            // twice the figure, so the key converts with the slot.
+            temperatureUnit == .celsius
+                ? ["Within 2° of the air temperature — saturated: mist, fog or drizzle",
+                   "2–5° below — muggy",
+                   "5–10° below — comfortable",
+                   "More than 10° below — dry air"]
+                : ["Within 4° of the air temperature — saturated: mist, fog or drizzle",
+                   "4–9° below — muggy",
+                   "9–18° below — comfortable",
+                   "More than 18° below — dry air"]
         case .pressure:
             pressureStyle.pressureKey
         case .tendency:
@@ -124,7 +135,7 @@ extension StationSlot {
         }
     }
 
-    var examples: [StationGuideExample] {
+    func examples(_ temperatureUnit: TemperatureUnit) -> [StationGuideExample] {
         switch self {
         case .cloud:
             [.init("Sky clear", .guide(cloud: 0), parts: [.oktas]),
@@ -149,11 +160,16 @@ extension StationSlot {
              .init("Mist", .guide(code: 45), parts: [.oktas, .presentWeather]),
              .init("Fog — sky obscured, so an X", .guide(code: 48), parts: [.oktas, .presentWeather])]
         case .temperature:
-            [.init("14 °C", .guide(temp: 14), parts: [.oktas, .temperature])]
+            [.init("\(temperatureUnit.rounded(14)) \(temperatureUnit.symbol)",
+                   .guide(temp: 14), parts: [.oktas, .temperature])]
         case .dewPoint:
-            [.init("Air 14°, dew point 11° — muggy", .guide(temp: 14, dew: 11),
+            [.init("Air \(temperatureUnit.rounded(14))°, dew point "
+                   + "\(temperatureUnit.rounded(11))° — muggy",
+                   .guide(temp: 14, dew: 11),
                    parts: [.oktas, .temperature, .annotations]),
-             .init("Air 20°, dew point 4° — dry", .guide(temp: 20, dew: 4),
+             .init("Air \(temperatureUnit.rounded(20))°, dew point "
+                   + "\(temperatureUnit.rounded(4))° — dry",
+                   .guide(temp: 20, dew: 4),
                    parts: [.oktas, .temperature, .annotations])]
         case .pressure:
             [.init("1021.6 hPa", .guide(pressure: 1021.6), parts: [.oktas, .annotations]),
@@ -184,19 +200,20 @@ extension StationSlot {
     /// The example that makes the best thumbnail: the one where the piece
     /// is unmistakably present (an empty circle is a poor advert for cloud
     /// cover).
-    var listExample: StationGuideExample {
+    func listExample(_ temperatureUnit: TemperatureUnit) -> StationGuideExample {
         switch self {
-        case .cloud, .wind:   examples[2]
-        case .presentWeather: examples[1]
-        case .cloudGenus:     examples[1]
-        default:              examples[0]
+        case .cloud, .wind:   examples(temperatureUnit)[2]
+        case .presentWeather: examples(temperatureUnit)[1]
+        case .cloudGenus:     examples(temperatureUnit)[1]
+        default:              examples(temperatureUnit)[0]
         }
     }
 
     /// What this slot says on the circle in front of you — including the
     /// honest "nothing here today" cases.
     func reading(for observation: StationObservation,
-                 pressureStyle: PressureStyle) -> String {
+                 pressureStyle: PressureStyle,
+                 temperatureUnit: TemperatureUnit) -> String {
         switch self {
         case .cloud:
             return "\(observation.oktas)⁄8 — \(Self.cloudTerm(observation.oktas))"
@@ -214,14 +231,18 @@ extension StationSlot {
             }
             return "\(Self.precipName(key)) — the symbol on the left."
         case .temperature:
-            return "\(observation.roundedTemp) °C"
+            return "\(observation.roundedTemp(temperatureUnit)) \(temperatureUnit.symbol)"
         case .dewPoint:
-            guard let dew = observation.dewPointRounded else {
+            guard let dew = observation.dewPointRounded(temperatureUnit),
+                  let dewC = observation.dewPointC else {
                 return "Not available for this location."
             }
-            let spread = observation.temperatureC - Double(dew)
-            return "\(dew) °C — \(Int(spread.rounded()))° below the air temperature: "
-                + "\(Self.dewTerm(spread))."
+            // The wording thresholds are °C spreads; the figures shown
+            // follow the chosen unit.
+            let spreadC = observation.temperatureC - dewC
+            let shownSpread = observation.roundedTemp(temperatureUnit) - dew
+            return "\(dew) \(temperatureUnit.symbol) — \(shownSpread)° below the air "
+                + "temperature: \(Self.dewTerm(spreadC))."
         case .pressure:
             guard let coded = observation.pressureCodedPPP,
                   let hPa = observation.pressureMSLhPa else {
@@ -450,6 +471,8 @@ struct StationSlotDetail: View {
     var observation: StationObservation
     @AppStorage(PressureStyleStore.key, store: PressureStyleStore.defaults)
     private var pressureStyle: PressureStyle = .default
+    @AppStorage(TemperatureUnitStore.key, store: TemperatureUnitStore.defaults)
+    private var temperatureUnit: TemperatureUnit = .default
 
     var body: some View {
         ScrollView {
@@ -461,16 +484,17 @@ struct StationSlotDetail: View {
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
                 }
-                Text(slot.meaning(pressureStyle))
+                Text(slot.meaning(pressureStyle, temperatureUnit))
 
                 section("On your circle right now") {
-                    Text(slot.reading(for: observation, pressureStyle: pressureStyle))
+                    Text(slot.reading(for: observation, pressureStyle: pressureStyle,
+                                      temperatureUnit: temperatureUnit))
                         .font(.callout)
                 }
 
-                // The two slots the setting governs carry it here as well
-                // as in Settings: this is the page you're on when you find
-                // the shorthand unreadable.
+                // The slots a setting governs carry it here as well as in
+                // Settings: this is the page you're on when you find the
+                // shorthand unreadable, or the unit foreign.
                 if slot == .pressure || slot == .tendency {
                     section("How it's written") {
                         Picker("How it's written", selection: $pressureStyle) {
@@ -482,16 +506,29 @@ struct StationSlotDetail: View {
                         .labelsHidden()
                     }
                 }
-
-                section(slot.examples.count > 1 ? "Examples" : "Example") {
-                    StationGuideExampleGrid(examples: slot.examples,
-                                            pressureStyle: pressureStyle)
+                if slot == .temperature || slot == .dewPoint {
+                    section("How it's written") {
+                        Picker("How it's written", selection: $temperatureUnit) {
+                            ForEach(TemperatureUnit.allCases) { unit in
+                                Text(unit.title).tag(unit)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                    }
                 }
 
-                if !slot.howToRead(pressureStyle).isEmpty {
+                section(slot.examples(temperatureUnit).count > 1 ? "Examples" : "Example") {
+                    StationGuideExampleGrid(examples: slot.examples(temperatureUnit),
+                                            pressureStyle: pressureStyle,
+                                            temperatureUnit: temperatureUnit)
+                }
+
+                if !slot.howToRead(pressureStyle, temperatureUnit).isEmpty {
                     section("How to read it") {
                         VStack(alignment: .leading, spacing: 7) {
-                            ForEach(slot.howToRead(pressureStyle), id: \.self) { line in
+                            ForEach(slot.howToRead(pressureStyle, temperatureUnit),
+                                    id: \.self) { line in
                                 HStack(alignment: .top, spacing: 8) {
                                     Text("·").foregroundStyle(.tertiary)
                                     Text(line)
@@ -523,6 +560,7 @@ struct StationSlotDetail: View {
 private struct StationGuideExampleGrid: View {
     var examples: [StationGuideExample]
     var pressureStyle: PressureStyle
+    var temperatureUnit: TemperatureUnit
 
     private var tile: Double { examples.count > 4 ? 76 : 104 }
 
@@ -535,6 +573,7 @@ private struct StationGuideExampleGrid: View {
                                 showTemperature: example.parts.contains(.temperature),
                                 fullStationModel: true,
                                 pressureStyle: pressureStyle,
+                                temperatureUnit: temperatureUnit,
                                 parts: example.parts)
                         .frame(width: tile, height: tile)
                     Text(example.caption)
@@ -556,6 +595,8 @@ struct StationGuideView: View {
     var observation: StationObservation
     @AppStorage(PressureStyleStore.key, store: PressureStyleStore.defaults)
     private var pressureStyle: PressureStyle = .default
+    @AppStorage(TemperatureUnitStore.key, store: TemperatureUnitStore.defaults)
+    private var temperatureUnit: TemperatureUnit = .default
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -572,11 +613,12 @@ struct StationGuideView: View {
                     ForEach(StationSlot.allCases) { slot in
                         NavigationLink(value: slot) {
                             HStack(spacing: 14) {
-                                let example = slot.listExample
+                                let example = slot.listExample(temperatureUnit)
                                 StationPlot(observation: example.observation,
                                             showTemperature: example.parts.contains(.temperature),
                                             fullStationModel: true,
                                             pressureStyle: pressureStyle,
+                                            temperatureUnit: temperatureUnit,
                                             parts: example.parts)
                                     .frame(width: 54, height: 54)
                                     .accessibilityHidden(true)

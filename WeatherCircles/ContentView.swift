@@ -19,6 +19,9 @@ struct ContentView: View {
     /// Coded PPP/pp or the figures in full — see `PressureStyle`.
     @AppStorage(PressureStyleStore.key, store: PressureStyleStore.defaults)
     private var pressureStyle: PressureStyle = .default
+    /// °C or °F for every written temperature — see `TemperatureUnit`.
+    @AppStorage(TemperatureUnitStore.key, store: TemperatureUnitStore.defaults)
+    private var temperatureUnit: TemperatureUnit = .default
 
     /// The vertical pages, in order. Tracked so the area chart can wait
     /// until it's actually on screen before spending a fetch on itself.
@@ -140,6 +143,7 @@ struct ContentView: View {
             StationPlot(observation: observation ?? .sample,
                         fullStationModel: true,
                         pressureStyle: pressureStyle,
+                        temperatureUnit: temperatureUnit,
                         haloColor: Color(uiColor: .systemBackground),
                         highlightedSlot: explainedSlot,
                         onSelectSlot: explain)
@@ -259,7 +263,7 @@ struct ContentView: View {
 
     private var readouts: some View {
         VStack(spacing: 6) {
-            if let highLow = observation?.highLowText {
+            if let highLow = observation?.highLowText(temperatureUnit) {
                 Text(highLow)
                     .font(.title3.weight(.medium).monospacedDigit())
             }

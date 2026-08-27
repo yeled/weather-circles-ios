@@ -221,6 +221,10 @@ struct StationObservation: Codable, Equatable {
     var roundedTemp: Int { Int(temperatureC.rounded()) }
     var dewPointRounded: Int? { dewPointC.map { Int($0.rounded()) } }
 
+    /// TT under a chosen writing — the data stays °C; see `TemperatureUnit`.
+    func roundedTemp(_ unit: TemperatureUnit) -> Int { unit.rounded(temperatureC) }
+    func dewPointRounded(_ unit: TemperatureUnit) -> Int? { dewPointC.map(unit.rounded) }
+
     /// PPP — MSLP in coded synoptic form: tenths of hPa, last three digits
     /// (1021.6 → "216", 998.7 → "987").
     var pressureCodedPPP: String? {
@@ -273,9 +277,9 @@ struct StationObservation: Codable, Equatable {
         windSpeedKnots < 1 ? "Calm" : "\(compassPoint) \(Int(windSpeedKnots.rounded())) kn"
     }
 
-    var highLowText: String? {
+    func highLowText(_ unit: TemperatureUnit) -> String? {
         guard let high = todayHighC, let low = todayLowC else { return nil }
-        return "H \(Int(high.rounded()))°  L \(Int(low.rounded()))°"
+        return "H \(unit.rounded(high))°  L \(unit.rounded(low))°"
     }
 
     var genusText: String? {
@@ -284,10 +288,10 @@ struct StationObservation: Codable, Equatable {
         return genusStationICAO.map { "\(label) at \($0)" } ?? label
     }
 
-    var accessibilitySummary: String {
-        var parts = ["\(roundedTemp) degrees", windText, "\(oktas) of 8 cloud"]
+    func accessibilitySummary(_ unit: TemperatureUnit) -> String {
+        var parts = ["\(roundedTemp(unit)) degrees", windText, "\(oktas) of 8 cloud"]
         if let effectivePrecip { parts.append(effectivePrecip.rawValue) }
-        if let dew = dewPointRounded { parts.append("dew point \(dew)") }
+        if let dew = dewPointRounded(unit) { parts.append("dew point \(dew)") }
         if let pressure = pressureMSLhPa {
             parts.append("\(Int(pressure.rounded())) hectopascals")
         }
@@ -295,7 +299,7 @@ struct StationObservation: Codable, Equatable {
             parts.append(lowCloudGenus == .cumulonimbus
                          ? "cumulonimbus observed" : "towering cumulus observed")
         }
-        if let highLowText { parts.append(highLowText) }
+        if let highLow = highLowText(unit) { parts.append(highLow) }
         return parts.joined(separator: ", ")
     }
 

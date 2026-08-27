@@ -15,6 +15,9 @@ struct CountryChartView: View {
     /// The page is off-screen until it's paged to; the fetch waits for it.
     var isActive: Bool
 
+    @AppStorage(TemperatureUnitStore.key, store: TemperatureUnitStore.defaults)
+    private var temperatureUnit: TemperatureUnit = .default
+
     @State private var region: CountryAtlas.Region?
     @State private var readings: [AreaObservationsClient.Reading] = []
     @State private var fetchedAt: Date?
@@ -110,7 +113,8 @@ struct CountryChartView: View {
                             .position(point)
                     }
                     let names = Self.nameLayout(for: placed, in: proxy.size,
-                                                metrics: metrics)
+                                                metrics: metrics,
+                                                unit: temperatureUnit)
                     ForEach(placed, id: \.0.id) { reading, _ in
                         if let placement = names[reading.id] {
                             label(for: reading, compact: placement.compact,
@@ -163,7 +167,7 @@ struct CountryChartView: View {
                 Text(reading.name)
                     .foregroundStyle(reading.id == 0 ? .primary : .secondary)
             }
-            Text("\(reading.observation.roundedTemp)°")
+            Text("\(reading.observation.roundedTemp(temperatureUnit))°")
                 .fontWeight(.semibold)
                 .monospacedDigit()
         }
@@ -173,7 +177,7 @@ struct CountryChartView: View {
         .padding(.horizontal, 2)
         .background(Color(uiColor: .systemBackground).opacity(0.85))
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("\(reading.name): \(reading.observation.accessibilitySummary)"))
+        .accessibilityLabel(Text("\(reading.name): \(reading.observation.accessibilitySummary(temperatureUnit))"))
     }
 
     /// Where every name goes, in one pass over the chart.
@@ -194,7 +198,8 @@ struct CountryChartView: View {
     }
 
     static func nameLayout(for placed: [(AreaObservationsClient.Reading, CGPoint)],
-                           in size: CGSize, metrics: Metrics) -> [Int: NamePlacement] {
+                           in size: CGSize, metrics: Metrics,
+                           unit: TemperatureUnit) -> [Int: NamePlacement] {
         let circle = metrics.circle
         let circles = placed.map { CGRect(x: $0.1.x - circle / 2, y: $0.1.y - circle / 2,
                                           width: circle, height: circle) }
@@ -207,7 +212,8 @@ struct CountryChartView: View {
             // — Zealand, with four places inside 60 km — the temperature on
             // its own is a third of the width and nearly always fits.
             for compact in [false, true] {
-                let label = measure(reading, compact: compact, metrics: metrics)
+                let label = Self.measure(reading, compact: compact, metrics: metrics,
+                                         unit: unit)
                 guard label.width <= size.width, label.height <= size.height else { continue }
                 for candidate in slots(around: point, label: label, circle: circle) {
                     // Slid back inside the chart rather than rejected: a
@@ -261,8 +267,9 @@ struct CountryChartView: View {
     /// before SwiftUI has drawn anything. Measured in the same text style
     /// the label uses, so it follows Dynamic Type too.
     private static func measure(_ reading: AreaObservationsClient.Reading,
-                                compact: Bool, metrics: Metrics) -> CGSize {
-        let degrees = "\(reading.observation.roundedTemp)°"
+                                compact: Bool, metrics: Metrics,
+                                unit: TemperatureUnit) -> CGSize {
+        let degrees = "\(reading.observation.roundedTemp(unit))°"
         let text = (compact || reading.name.isEmpty) ? degrees : "\(reading.name) \(degrees)"
         let font = UIFont.preferredFont(forTextStyle: metrics.textStyle)
         let size = (text as NSString).size(withAttributes: [.font: font])
