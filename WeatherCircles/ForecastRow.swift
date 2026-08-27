@@ -4,6 +4,8 @@ import SwiftUI
 /// circles in the plugin's 4-column grid — hour above, temperature below.
 struct ForecastRow: View {
     let slots: [StationObservation.ForecastSlot]
+    @AppStorage(TemperatureUnitStore.key, store: TemperatureUnitStore.defaults)
+    private var temperatureUnit: TemperatureUnit = .default
 
     private let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: 4)
 
@@ -16,8 +18,9 @@ struct ForecastRow: View {
                         .foregroundStyle(.secondary)
                     StationPlot(observation: slot.asObservation(),
                                 showTemperature: false,
+                                temperatureUnit: temperatureUnit,
                                 haloColor: Color(uiColor: .systemBackground))
-                    Text("\(Int(slot.temperatureC.rounded()))°")
+                    Text("\(temperatureUnit.rounded(slot.temperatureC))°")
                         .font(.caption.weight(.semibold))
                         .monospacedDigit()
                 }

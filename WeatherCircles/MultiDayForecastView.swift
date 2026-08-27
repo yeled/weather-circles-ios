@@ -5,6 +5,8 @@ import SwiftUI
 struct MultiDayForecastView: View {
     let days: [StationObservation.DailyForecast]
     let placeName: String
+    @AppStorage(TemperatureUnitStore.key, store: TemperatureUnitStore.defaults)
+    private var temperatureUnit: TemperatureUnit = .default
 
     var body: some View {
         VStack(spacing: 6) {
@@ -51,6 +53,7 @@ struct MultiDayForecastView: View {
                 .frame(width: 56, alignment: .leading)
             StationPlot(observation: day.asObservation(),
                         showTemperature: false,
+                        temperatureUnit: temperatureUnit,
                         haloColor: Color(uiColor: .systemBackground))
                 .frame(height: 54)
             Spacer(minLength: 4)
@@ -63,11 +66,11 @@ struct MultiDayForecastView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 62, alignment: .trailing)
-            Text("\(Int(day.highC.rounded()))°")
+            Text("\(temperatureUnit.rounded(day.highC))°")
                 .font(.callout.weight(.semibold))
                 .monospacedDigit()
                 .frame(width: 36, alignment: .trailing)
-            Text("\(Int(day.lowC.rounded()))°")
+            Text("\(temperatureUnit.rounded(day.lowC))°")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .monospacedDigit()

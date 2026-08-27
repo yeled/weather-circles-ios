@@ -165,6 +165,9 @@ private func currentObservation(pinnedTo pinned: City? = nil) async -> StationOb
 struct WeatherCirclesWidgetEntryView: View {
     var entry: WeatherEntry
     @Environment(\.widgetFamily) private var family
+    /// Read at render, not carried in the entry: Settings reloads every
+    /// timeline when it changes, so a stale value never survives long.
+    private var unit: TemperatureUnit { TemperatureUnitStore.current }
 
     var body: some View {
         content
@@ -184,17 +187,19 @@ struct WeatherCirclesWidgetEntryView: View {
             ZStack {
                 AccessoryWidgetBackground()
                 StationPlot(observation: entry.observation, ink: .primary,
-                            mono: true, showTemperature: false)
+                            mono: true, showTemperature: false,
+                            temperatureUnit: unit)
                     .padding(2)
             }
         case .accessoryRectangular:
             HStack(spacing: 6) {
                 StationPlot(observation: entry.observation, ink: .primary,
-                            mono: true, showTemperature: false)
+                            mono: true, showTemperature: false,
+                            temperatureUnit: unit)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text("\(entry.observation.roundedTemp)°")
+                    Text("\(entry.observation.roundedTemp(unit))°")
                         .font(.system(size: 22, weight: .bold, design: .rounded))
-                    if let highLow = entry.observation.highLowText {
+                    if let highLow = entry.observation.highLowText(unit) {
                         Text(highLow)
                             .font(.caption2.monospacedDigit())
                     }
@@ -208,13 +213,14 @@ struct WeatherCirclesWidgetEntryView: View {
                 Spacer(minLength: 0)
             }
         case .accessoryInline:
-            Text("\(entry.observation.roundedTemp)° · \(entry.observation.windText) · \(entry.observation.oktas)⁄8")
+            Text("\(entry.observation.roundedTemp(unit))° · \(entry.observation.windText) · \(entry.observation.oktas)⁄8")
         default: // .systemSmall
             VStack(spacing: 0) {
                 StationPlot(observation: entry.observation,
+                            temperatureUnit: unit,
                             haloColor: Color(uiColor: .systemBackground))
                 HStack {
-                    if let highLow = entry.observation.highLowText {
+                    if let highLow = entry.observation.highLowText(unit) {
                         Text(highLow).monospacedDigit()
                     }
                     Spacer()
@@ -279,6 +285,8 @@ struct ForecastProvider: AppIntentTimelineProvider {
 /// twice, one of each span, and the whole strip is circles.
 struct ForecastCirclesEntryView: View {
     var entry: WeatherEntry
+    /// Read at render, same rationale as the circle widget's.
+    private var unit: TemperatureUnit { TemperatureUnitStore.current }
 
     var body: some View {
         content
@@ -292,7 +300,7 @@ struct ForecastCirclesEntryView: View {
             if let slots = entry.observation.forecastSlots, !slots.isEmpty {
                 row(slots.prefix(4).map { slot in
                     (slot.hourLabel, slot.asObservation(),
-                     Int(slot.temperatureC.rounded()))
+                     unit.rounded(slot.temperatureC))
                 })
             } else {
                 fallback
@@ -301,7 +309,7 @@ struct ForecastCirclesEntryView: View {
             if let days = entry.observation.dailyForecast, !days.isEmpty {
                 row(days.prefix(4).map { day in
                     (Self.weekday(from: day.dateISO), day.asObservation(),
-                     Int(day.highC.rounded()))
+                     unit.rounded(day.highC))
                 })
             } else {
                 fallback
@@ -319,7 +327,8 @@ struct ForecastCirclesEntryView: View {
                         .foregroundStyle(.secondary)
                     StationPlot(observation: column.observation,
                                 ink: .primary, mono: true,
-                                showTemperature: false)
+                                showTemperature: false,
+                                temperatureUnit: unit)
                     Text("\(column.temp)°")
                         .font(.caption2.weight(.semibold))
                         .monospacedDigit()
@@ -335,8 +344,9 @@ struct ForecastCirclesEntryView: View {
     private var fallback: some View {
         HStack(spacing: 6) {
             StationPlot(observation: entry.observation, ink: .primary,
-                        mono: true, showTemperature: false)
-            Text("\(entry.observation.roundedTemp)°")
+                        mono: true, showTemperature: false,
+                        temperatureUnit: unit)
+            Text("\(entry.observation.roundedTemp(unit))°")
                 .font(.system(size: 22, weight: .bold, design: .rounded))
             Spacer(minLength: 0)
         }

@@ -1,4 +1,6 @@
-New in 1.3
+New in 1.3.1
+
+• Fahrenheit. Settings can write every temperature in °F — the circle, the forecasts, the widgets, and the guide — the same way the pressure slots can be spelled out in full. The model still thinks in °C, as charts do.
 
 • The Weather Circle widget can now be pinned to any of your recent locations (or left following the app) — so four circles on the lock screen can be four different places.
 

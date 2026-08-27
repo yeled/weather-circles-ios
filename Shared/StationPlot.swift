@@ -25,6 +25,8 @@ struct StationPlot: View {
     /// figures in full. Only the full station model draws either, so
     /// everything else takes the default and is unaffected.
     var pressureStyle: PressureStyle = .default
+    /// How TT and TdTd are written — °C (the chart's convention) or °F.
+    var temperatureUnit: TemperatureUnit = .default
     /// Casing drawn under the barb so it survives a solid 8-okta disc
     /// (`halo` in the Python). Pass the view's background colour.
     var haloColor: Color?
@@ -82,7 +84,7 @@ struct StationPlot: View {
                 drawStationModelAnnotations(&context, ink: ink)
             }
             if showTemperature && parts.contains(.temperature) {
-                let label = Text("\(observation.roundedTemp)°")
+                let label = Text("\(observation.roundedTemp(temperatureUnit))°")
                     .font(.system(size: 26, weight: .bold))
                     .foregroundStyle(ink)
                 if fullStationModel {
@@ -95,7 +97,7 @@ struct StationPlot: View {
             }
         }
         .aspectRatio(1, contentMode: .fit)
-        .accessibilityLabel(Text(observation.accessibilitySummary))
+        .accessibilityLabel(Text(observation.accessibilitySummary(temperatureUnit)))
         .accessibilityIdentifier("stationPlot")   // the screenshot UI test aims at this
         .overlay { tapTarget }
     }
@@ -507,7 +509,7 @@ struct StationPlot: View {
         }
 
         // TdTd — dew point, lower-left.
-        if let dew = observation.dewPointRounded {
+        if let dew = observation.dewPointRounded(temperatureUnit) {
             context.draw(label("\(dew)°", size: 26), at: dewPointAnchor, anchor: .topTrailing)
         }
         // PPP — MSLP upper-right, coded in tenths or written in full.
